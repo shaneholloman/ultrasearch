@@ -43,7 +43,13 @@ mod duration_ms {
             S: Serializer,
         {
             match value {
-                Some(dur) => super::serialize(dur, serializer),
+                Some(dur) => {
+                    let ms: u64 = dur
+                        .as_millis()
+                        .try_into()
+                        .map_err(|_| serde::ser::Error::custom("duration too large for u64 millis"))?;
+                    serializer.serialize_some(&ms)
+                }
                 None => serializer.serialize_none(),
             }
         }

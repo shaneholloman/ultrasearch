@@ -65,7 +65,7 @@ memmap2 = "*"
 extractous = { version = "*" }
 reqwest = { version = "*", default-features = false, features = ["rustls-tls", "stream"] }
 image = { version = "*", default-features = false, features = ["png", "jpeg"] }
-uuid = { version = "*", features = ["v4"] }
+uuid = { version = "*", features = ["v4", "serde"] }
 tracing = "*"
 tracing-subscriber = { version = "*", features = ["env-filter", "fmt"] }
 smallvec = "*"
