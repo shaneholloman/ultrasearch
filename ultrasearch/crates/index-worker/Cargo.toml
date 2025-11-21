@@ -16,3 +16,5 @@ core-types = { path = "../core-types" }
 content-extractor = { path = "../content-extractor" }
 content-index = { path = "../content-index" }
 ipc = { path = "../ipc" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
