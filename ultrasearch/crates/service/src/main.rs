@@ -10,7 +10,10 @@ use service::{
     init_tracing_with_config,
     metrics::{init_metrics_from_config, set_global_metrics, spawn_metrics_http},
     scheduler_runtime::SchedulerRuntime,
+    search_handler::{MetaIndexSearchHandler, set_search_handler},
+    status_provider::init_basic_status_provider,
 };
+use std::path::Path;
 
 #[derive(Parser, Debug)]
 #[command(name = "searchd", about = "UltraSearch service host")]
@@ -27,7 +30,7 @@ fn main() -> Result<()> {
     let _guard = init_tracing_with_config(&cfg.logging)?;
 
     // Install status provider so IPC/status can respond.
-    service::status_provider::init_basic_status_provider();
+    init_basic_status_provider();
 
     if cfg.metrics.enabled {
         let metrics = Arc::new(init_metrics_from_config(&cfg.metrics)?);
@@ -49,10 +52,20 @@ fn main() -> Result<()> {
     thread::spawn(move || {
         let mut runtime = SchedulerRuntime::new(sched_cfg);
         loop {
+            // TODO: connect real queue/worker telemetry from scheduler loop once available.
+            set_live_queue_counts(0, 0, 0);
+            set_live_active_workers(0);
             let _ = runtime.tick();
             thread::sleep(sample_every);
         }
     });
+
+    // Try to install metadata search handler (optional; fallback is stub).
+    if let Ok(handler) = MetaIndexSearchHandler::try_new(Path::new(&cfg.paths.meta_index)) {
+        set_search_handler(Box::new(handler));
+    } else {
+        tracing::warn!("meta-index search handler not initialized; falling back to stub");
+    }
 
     println!(
         "UltraSearch service placeholder – scheduler sampling active (config: {}).",
