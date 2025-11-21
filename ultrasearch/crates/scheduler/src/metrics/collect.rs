@@ -1,5 +1,10 @@
 use std::time::{Duration, Instant};
 use sysinfo::System;
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Performance::{
+    PDH_FMT_COUNTERVALUE, PDH_FMT_DOUBLE, PDH_HCOUNTER, PDH_HQUERY, PdhAddEnglishCounterW,
+    PdhCloseQuery, PdhCollectQueryData, PdhGetFormattedCounterValue, PdhOpenQueryW,
+};
 
 /// Snapshot of system load suitable for scheduling decisions.
 #[derive(Debug, Clone, Copy)]
@@ -18,6 +23,8 @@ pub struct SystemLoadSampler {
     system: System,
     disk_busy_threshold_bps: u64,
     last_sample: Instant,
+    #[cfg(target_os = "windows")]
+    disk_counter: Option<PdhCounter>,
 }
 
 impl SystemLoadSampler {
@@ -26,11 +33,15 @@ impl SystemLoadSampler {
         let mut system = System::new();
         system.refresh_cpu();
         system.refresh_memory();
+        #[cfg(target_os = "windows")]
+        let disk_counter = PdhCounter::new_total_disk_bytes().ok();
 
         Self {
             system,
             disk_busy_threshold_bps,
             last_sample: Instant::now(),
+            #[cfg(target_os = "windows")]
+            disk_counter,
         }
     }
 
@@ -59,9 +70,7 @@ impl SystemLoadSampler {
         let total_mem = self.system.total_memory().max(1);
         let mem_used_percent = (self.system.used_memory() as f32 / total_mem as f32) * 100.0;
 
-        // Disk IO placeholders (sysinfo 0.30 lacks per-System IO counters in this build).
-        let disk_bytes_per_sec = 0u64;
-        let disk_busy = false;
+        let (disk_bytes_per_sec, disk_busy) = self.sample_disk();
 
         self.last_sample = now;
 
@@ -71,6 +80,62 @@ impl SystemLoadSampler {
             disk_bytes_per_sec,
             disk_busy,
             sample_duration: elapsed,
+        }
+    }
+
+    fn sample_disk(&mut self) -> (u64, bool) {
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(counter) = self.disk_counter.as_mut() {
+                if let Ok(bytes_per_sec) = counter.sample_bytes_per_sec() {
+                    let busy = bytes_per_sec >= self.disk_busy_threshold_bps;
+                    return (bytes_per_sec, busy);
+                }
+            }
+        }
+        // Fallback when disk metrics unavailable.
+        (0, false)
+    }
+}
+
+#[cfg(target_os = "windows")]
+struct PdhCounter {
+    query: PDH_HQUERY,
+    counter: PDH_HCOUNTER,
+}
+
+#[cfg(target_os = "windows")]
+impl PdhCounter {
+    fn new_total_disk_bytes() -> windows::core::Result<Self> {
+        unsafe {
+            let mut query = PDH_HQUERY::default();
+            PdhOpenQueryW(None, 0, &mut query).ok()?;
+
+            let mut counter = PDH_HCOUNTER::default();
+            let path = "\\PhysicalDisk(_Total)\\Disk Bytes/sec";
+            PdhAddEnglishCounterW(query, path, 0, &mut counter).ok()?;
+            PdhCollectQueryData(query).ok()?;
+
+            Ok(Self { query, counter })
+        }
+    }
+
+    fn sample_bytes_per_sec(&mut self) -> windows::core::Result<u64> {
+        unsafe {
+            PdhCollectQueryData(self.query).ok()?;
+            let mut value = PDH_FMT_COUNTERVALUE::default();
+            PdhGetFormattedCounterValue(self.counter, PDH_FMT_DOUBLE, None, &mut value).ok()?;
+            let v = value.Anonymous.doubleValue;
+            Ok(if v.is_sign_negative() { 0 } else { v as u64 })
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for PdhCounter {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = PdhCloseQuery(self.query);
         }
     }
 }
