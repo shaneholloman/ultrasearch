@@ -198,12 +198,8 @@ pub fn select_jobs(
     take(&mut queues.critical, 16);
 
     // Gate metadata/content on idle state and load thresholds.
-    let allow_metadata = matches!(idle, IdleState::WarmIdle | IdleState::DeepIdle)
-        && load.cpu_percent < 60.0
-        && !load.disk_busy;
-
-    let allow_content =
-        matches!(idle, IdleState::DeepIdle) && load.cpu_percent < 40.0 && !load.disk_busy;
+    let allow_metadata = allow_metadata_jobs(idle, load);
+    let allow_content = allow_content_jobs(idle, load);
 
     if allow_metadata {
         take(&mut queues.metadata, 256);
@@ -216,21 +212,35 @@ pub fn select_jobs(
     selected
 }
 
+/// Basic policy for running metadata jobs.
+pub fn allow_metadata_jobs(idle: IdleState, load: SystemLoad) -> bool {
+    matches!(idle, IdleState::WarmIdle | IdleState::DeepIdle)
+        && load.cpu_percent < 60.0
+        && !load.disk_busy
+}
+
+/// Basic policy for running content jobs (heavier work).
+pub fn allow_content_jobs(idle: IdleState, load: SystemLoad) -> bool {
+    matches!(idle, IdleState::DeepIdle) && load.cpu_percent < 40.0 && !load.disk_busy
+}
+
 #[cfg(target_os = "windows")]
 fn idle_elapsed_ms() -> Option<u64> {
-    use windows::Win32::System::SystemInformation::GetTickCount;
-    use windows::Win32::UI::WindowsAndMessaging::GetLastInputInfo;
-    use windows::Win32::UI::WindowsAndMessaging::LASTINPUTINFO;
+    use windows::Win32::Foundation::LASTINPUTINFO;
+    use windows::Win32::System::SystemInformation::GetTickCount64;
+    use windows::Win32::UI::Input::KeyboardAndMouse::GetLastInputInfo;
 
-    let mut info = LASTINPUTINFO {
-        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
-        dwTime: 0,
-    };
+    // SAFETY: GetLastInputInfo requires a properly initialized struct.
     unsafe {
+        let mut info = LASTINPUTINFO {
+            cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+            dwTime: 0,
+        };
         if GetLastInputInfo(&mut info).as_bool() {
-            let now = GetTickCount() as u64;
+            let now = GetTickCount64() as u64;
             let last = info.dwTime as u64;
-            return Some(now.saturating_sub(last));
+            // Handle potential tick wrap gracefully.
+            return now.checked_sub(last);
         }
     }
     warn!("GetLastInputInfo failed; treating as active");
@@ -246,6 +256,39 @@ fn idle_elapsed_ms() -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn content_jobs_blocked_when_not_deep_idle() {
+        let load = SystemLoad {
+            cpu_percent: 10.0,
+            mem_used_percent: 10.0,
+            disk_busy: false,
+        };
+        assert!(!allow_content_jobs(IdleState::WarmIdle, load));
+        assert!(allow_content_jobs(IdleState::DeepIdle, load));
+    }
+
+    #[test]
+    fn metadata_jobs_respect_cpu_and_disk() {
+        let load = SystemLoad {
+            cpu_percent: 50.0,
+            mem_used_percent: 10.0,
+            disk_busy: false,
+        };
+        assert!(allow_metadata_jobs(IdleState::WarmIdle, load));
+
+        let busy = SystemLoad {
+            disk_busy: true,
+            ..load
+        };
+        assert!(!allow_metadata_jobs(IdleState::WarmIdle, busy));
+
+        let high_cpu = SystemLoad {
+            cpu_percent: 70.0,
+            ..load
+        };
+        assert!(!allow_metadata_jobs(IdleState::WarmIdle, high_cpu));
+    }
 
     #[test]
     fn budgets_respected_files_and_bytes() {
