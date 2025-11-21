@@ -1,6 +1,7 @@
 At a high level you’re building:
 
 **Progress log**
+- 2025-11-21 (PurpleBear): c00.3.3 service bootstrap meta ingest — service now discovers NTFS volumes at startup, enumerates MFT entries, and ingests FileMeta batches into the meta-index via `meta_ingest`, updating status with commit timestamps; search handler still stubbed.
 - 2025-11-21 (WhiteDog): IPC search installs meta-index handler (name/path) when index path exists; Status IPC uses BasicStatusProvider + metrics and sets served_by; scheduler runtime fills queue depth/active_workers.
 - 2025-11-21 (PurplePond): c00.5.6 job-file schema v1 — index-worker consumes versioned JSON (legacy array still works), writes extracted docs into content index, supports commit_every, Extractous flag/env, preview/JSON output; workspace fmt/check/clippy clean.
 - 2025-11-21 (PurplePond): c00.5.2 worker shim expanded — index-worker supports `--job-file` (JSON array), per-job limits, preview/`--json`, env/flag Extractous toggle; workspace rebuilt after restoring scheduler/service metrics placeholders.
@@ -16,6 +17,7 @@ At a high level you’re building:
 - 2025-11-21 (WhiteStone): c00.8.4 in progress — status defaults to "initializing", metrics bind served; workspace deps add tempfile/memmap2 for core-serialization; cargo check green.
 - 2025-11-21 (WhiteStone): Added `init_basic_status_provider()` and global update helpers so scheduler/IPC can push volumes/state/metrics/queue/last_commit without threading Arcs; status still defaults to initializing until real data arrives.
 - 2025-11-21 (WhiteStone): Scheduler runtime now pushes queue depth/active worker counts + scheduler state into status/metrics; service main uses helper init + spawns /metrics server; Clap config loading wired.
+- 2025-11-21 (LilacHill): c00.8.2 logging stdout honors config.format (json/text); file logging stays JSON; log dir auto-creation kept; fmt/check/clippy clean.
 - 2025-11-21 (WhiteStone): Windows-only disk I/O metrics restored via PDH “Disk Bytes/sec”; non-Windows remains placeholder. Removed stale search handler; service/metrics `/metrics` TCP server retained; workspace build clean.
 - 2025-11-21 (LilacHill): c00.8.2 tracing/logging — service logging now uses config-driven level/file; JSON rolling file + stdout; tracing-subscriber json feature enabled.
 - 2025-11-21 (LilacHill): c00.8.4 status response now includes served_by host label; IPC/service tests updated.
