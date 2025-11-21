@@ -1,3 +1,4 @@
+use gpui::prelude::*;
 use gpui::*;
 use crate::model::state::SearchAppModel;
 use std::process::Command;
@@ -7,12 +8,12 @@ pub struct PreviewView {
 }
 
 impl PreviewView {
-    pub fn new(model: Model<SearchAppModel>, cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(model: Model<SearchAppModel>, cx: &mut Context<Self>) -> Self {
         cx.observe(&model, |_, _, cx| cx.notify()).detach();
         Self { model }
     }
 
-    fn open_in_explorer(&mut self, path: &str, _cx: &mut ViewContext<Self>) {
+    fn open_in_explorer(&mut self, path: &str, _cx: &mut Context<Self>) {
         #[cfg(target_os = "windows")]
         {
             Command::new("explorer")
@@ -31,9 +32,6 @@ impl PreviewView {
         }
         #[cfg(target_os = "linux")]
         {
-            // Try to select if possible (e.g. dolphin --select), otherwise just open dir
-            // xdg-open opens the file/dir. To select, we might need specific FM support.
-            // For generic linux, just opening the parent dir is safer.
             if let Some(parent) = std::path::Path::new(path).parent() {
                  Command::new("xdg-open")
                     .arg(parent)
@@ -45,7 +43,7 @@ impl PreviewView {
 }
 
 impl Render for PreviewView {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let model = self.model.read(cx);
         let selected = model.selected_row();
 
@@ -87,7 +85,7 @@ impl Render for PreviewView {
                                 .child("Open in File Manager")
                                 .on_click(cx.listener({
                                     let path = row.path.clone();
-                                    move |this, _, cx| this.open_in_explorer(&path, cx)
+                                    move |this: &mut Self, _, cx| this.open_in_explorer(&path, cx)
                                 }))
                         )
                 )

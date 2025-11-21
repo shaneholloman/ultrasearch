@@ -1,3 +1,4 @@
+use gpui::prelude::*;
 use gpui::*;
 use crate::model::state::{SearchAppModel, BackendMode};
 
@@ -7,7 +8,7 @@ pub struct SearchView {
 }
 
 impl SearchView {
-    pub fn new(model: Model<SearchAppModel>, cx: &mut ViewContext<Self>) -> Self {
+    pub fn new(model: Model<SearchAppModel>, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         cx.on_focus(&focus_handle, |_, _cx| { /* focus gained */ }).detach();
         
@@ -19,7 +20,7 @@ impl SearchView {
         }
     }
 
-    fn handle_key_down(&mut self, event: &KeyDownEvent, cx: &mut ViewContext<Self>) {
+    fn handle_key_down(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
         let mut query = self.model.read(cx).query.clone();
         let mut changed = false;
 
@@ -52,7 +53,7 @@ impl SearchView {
         }
     }
 
-    fn set_mode(&mut self, mode: BackendMode, cx: &mut ViewContext<Self>) {
+    fn set_mode(&mut self, mode: BackendMode, cx: &mut Context<Self>) {
         self.model.update(cx, |model, cx| {
             model.set_backend_mode(mode, cx);
         });
@@ -60,12 +61,12 @@ impl SearchView {
 }
 
 impl Render for SearchView {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let model = self.model.read(cx);
         let query = &model.query;
         let status = &model.status;
         
-        let mode_btn = |this: &mut Self, label: &str, mode: BackendMode, current: BackendMode, cx: &mut ViewContext<Self>| {
+        let mode_btn = |label: &str, mode: BackendMode, current: BackendMode, cx: &mut Context<Self>| {
             let active = mode == current;
             div()
                 .px_2()
@@ -75,7 +76,7 @@ impl Render for SearchView {
                 .text_color(if active { rgb(0xffffff) } else { rgb(0xaaaaaa) })
                 .cursor_pointer()
                 .child(label)
-                .on_click(cx.listener(move |this, _, cx| this.set_mode(mode, cx)))
+                .on_click(cx.listener(move |this: &mut Self, _, cx| this.set_mode(mode, cx)))
         };
 
         div()
@@ -105,9 +106,9 @@ impl Render for SearchView {
                     )
                     .child(
                         div().ml_2().flex().gap_1()
-                            .child(mode_btn(self, "Name", BackendMode::MetadataOnly, status.backend_mode, cx))
-                            .child(mode_btn(self, "Mixed", BackendMode::Mixed, status.backend_mode, cx))
-                            .child(mode_btn(self, "Content", BackendMode::ContentOnly, status.backend_mode, cx))
+                            .child(mode_btn("Name", BackendMode::MetadataOnly, status.backend_mode, cx))
+                            .child(mode_btn("Mixed", BackendMode::Mixed, status.backend_mode, cx))
+                            .child(mode_btn("Content", BackendMode::ContentOnly, status.backend_mode, cx))
                     )
             )
             .child(
