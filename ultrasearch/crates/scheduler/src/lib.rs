@@ -59,26 +59,18 @@ pub struct SystemLoadSampler {
     sys: sysinfo::System,
     /// Bytes/sec threshold to consider disk busy.
     pub disk_busy_threshold: u64,
-    last_read_bytes: u64,
-    last_write_bytes: u64,
     last_sample: Instant,
 }
 
 impl SystemLoadSampler {
     pub fn new(disk_busy_threshold: u64) -> Self {
         let mut sys = sysinfo::System::new();
-        sys.refresh_memory();
         sys.refresh_cpu();
-        sys.refresh_disks_list();
-        sys.refresh_disks();
-
-        let (read, write) = disk_totals(&sys);
+        sys.refresh_memory();
 
         Self {
             sys,
             disk_busy_threshold,
-            last_read_bytes: read,
-            last_write_bytes: write,
             last_sample: Instant::now(),
         }
     }
@@ -86,27 +78,19 @@ impl SystemLoadSampler {
     pub fn sample(&mut self) -> SystemLoad {
         self.sys.refresh_cpu();
         self.sys.refresh_memory();
-        self.sys.refresh_disks();
 
         let now = Instant::now();
-        let dt = now.saturating_duration_since(self.last_sample).max(Duration::from_millis(1));
+        let dt = now
+            .saturating_duration_since(self.last_sample)
+            .max(Duration::from_millis(1));
         let secs = dt.as_secs_f64();
 
         let cpu_percent = self.sys.global_cpu_info().cpu_usage();
         let total = self.sys.total_memory().max(1);
         let mem_used_percent = (self.sys.used_memory() as f32 / total as f32) * 100.0;
 
-        let (read, write) = disk_totals(&self.sys);
-        let read_bps =
-            ((read.saturating_sub(self.last_read_bytes)) as f64 / secs).round() as u64;
-        let write_bps =
-            ((write.saturating_sub(self.last_write_bytes)) as f64 / secs).round() as u64;
-
         self.last_sample = now;
-        self.last_read_bytes = read;
-        self.last_write_bytes = write;
-
-        let disk_busy = read_bps >= self.disk_busy_threshold || write_bps >= self.disk_busy_threshold;
+        let disk_busy = false; // disk metrics unavailable with current sysinfo build
 
         SystemLoad {
             cpu_percent,
@@ -114,12 +98,6 @@ impl SystemLoadSampler {
             disk_busy,
         }
     }
-}
-
-fn disk_totals(sys: &sysinfo::System) -> (u64, u64) {
-    sys.disks().iter().fold((0, 0), |(r_acc, w_acc), d| {
-        (r_acc + d.total_read_bytes(), w_acc + d.total_written_bytes())
-    })
 }
 
 #[derive(Debug)]
@@ -227,9 +205,8 @@ pub fn select_jobs(
         && load.cpu_percent < 60.0
         && !load.disk_busy;
 
-    let allow_content = matches!(idle, IdleState::DeepIdle)
-        && load.cpu_percent < 40.0
-        && !load.disk_busy;
+    let allow_content =
+        matches!(idle, IdleState::DeepIdle) && load.cpu_percent < 40.0 && !load.disk_busy;
 
     if allow_metadata {
         take(&mut queues.metadata, 256);
@@ -244,9 +221,9 @@ pub fn select_jobs(
 
 #[cfg(target_os = "windows")]
 fn idle_elapsed_ms() -> Option<u64> {
+    use windows::Win32::System::SystemInformation::GetTickCount;
     use windows::Win32::UI::WindowsAndMessaging::GetLastInputInfo;
     use windows::Win32::UI::WindowsAndMessaging::LASTINPUTINFO;
-    use windows::Win32::System::SystemInformation::GetTickCount;
 
     let mut info = LASTINPUTINFO {
         cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
