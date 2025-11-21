@@ -9,4 +9,4 @@ description = "Semantic/vector index plumbing for UltraSearch (placeholder)"
 [dependencies]
 core-types = { path = "../core-types" }
 anyhow = { workspace = true }
-hnsw_rs = { git = "https://github.com/example/hnsw-rs.git", optional = true }
+hnsw_rs = { version = "*", optional = true }

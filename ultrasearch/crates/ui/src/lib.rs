@@ -5,6 +5,8 @@
 
 use core_types::DocKey;
 
+const DEFAULT_MAX_ROWS: usize = 500;
+
 #[derive(Debug, Clone)]
 pub struct ResultRow {
     pub doc_key: DocKey,
@@ -26,7 +28,7 @@ impl ResultsStore {
     pub fn new(max_rows: usize) -> Self {
         Self {
             rows: Vec::new(),
-            max_rows,
+            max_rows: max_rows.max(1),
         }
     }
 
@@ -77,6 +79,10 @@ impl SearchAppModel {
             status: SearchStatus::default(),
             results: ResultsStore::new(max_rows),
         }
+    }
+
+    pub fn with_defaults() -> Self {
+        Self::new(DEFAULT_MAX_ROWS)
     }
 
     pub fn set_query(&mut self, text: impl Into<String>) {
