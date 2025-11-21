@@ -9,10 +9,12 @@ At a high level you’re building:
 - 2025-11-21 (WhiteDog): c00.6.3/4 — IPC client (Windows) adds timeout+retry+backoff and CLI exposes `--timeout-ms/--retries/--backoff-ms`; fmt/check clean on nightly.
 - 2025-11-21 (PinkSnow): c00.6.2 — pipe dispatcher returns timed empty SearchResponse with `served_by` host label; status still stubbed; cargo check/clippy clean.
 - 2025-11-21 (WhiteStone): broadcasted nightly + latest-crate policy, reassigned IPC/scheduler/core/NTFS beads to owners, and started c00.8.3 (metrics emission).
+- 2025-11-21 (WhiteStone): IPC metrics now record per-request latency; SearchRequest timeout serde stabilized (ms); FileMeta/FileEvent derive Eq/PartialEq to unblock ntfs-watcher tests; cargo check --all-targets green after lock refresh.
 - 2025-11-21 (BlueHill): c00.2.1 core types reorganized into `ids`/`types` modules (DocKey/FileMeta/Volume* re-exported); IPC `SearchRequest` builder helpers added; c00.5.2 prep — `extractous_backend` feature normalized and Extractous stub wired with size checks; fmt/check/clippy clean.
 - 2025-11-21 (BlueHill): c00.3.1 volume discovery scaffold in `ntfs-watcher` — Windows-only implementation using GetLogicalDrives + GetVolumeInformationW + GetVolumeNameForVolumeMountPointW, filters to NTFS volumes, maps VolumeId→GUID + drive letters; non-Windows returns NotSupported; fmt/check/clippy clean.
 - 2025-11-21 (BlueHill): c00.3.2 MFT enumeration scaffold — `ntfs-watcher::enumerate_mft` uses usn-journal-rs (Windows) to iterate entries with path resolution and returns FileMeta; non-Windows returns NotSupported; fmt/check/clippy clean.
 - 2025-11-21 (RedSnow): Added meta-index regression test (`to_document_sets_fields`) to verify doc_key/volume/path/ext/size/timestamps/flags storage; meta-index tests pass; no manifest changes.
+- 2025-11-21 (RedSnow): Core-serialization gained `from_bincode_with_limit` to defensively bound payload size (with tests); crate tests pass.
 
 * an **NTFS + USN–driven catalog** for filenames and metadata (Everything‑style),
 * a **Tantivy‑based full‑text engine** for contents,
