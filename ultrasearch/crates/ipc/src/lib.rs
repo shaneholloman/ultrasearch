@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 /// Serialize Durations as milliseconds to keep the wire format stable even if serde defaults change.
 mod duration_ms {
-    use serde::{Deserialize, Deserializer, Serializer};
+    use serde::{Deserialize, Deserializer, Serializer, de::IntoDeserializer};
     use std::time::Duration;
 
     pub fn serialize<S>(dur: &Duration, serializer: S) -> Result<S::Ok, S::Error>
@@ -52,8 +52,10 @@ mod duration_ms {
         where
             D: Deserializer<'de>,
         {
-            let opt = Option::<u64>::deserialize(deserializer)?;
-            Ok(opt.map(Duration::from_millis))
+            match Option::<u64>::deserialize(deserializer)? {
+                Some(ms) => super::deserialize(ms.into_deserializer()).map(Some),
+                None => Ok(None),
+            }
         }
     }
 }
@@ -126,9 +128,10 @@ impl Default for QueryExpr {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum SearchMode {
-    Auto,     // planner decides
+    #[default]
+    Auto, // planner decides
     NameOnly, // metadata index only
     Content,  // content index
     Hybrid,   // meta + content merge
