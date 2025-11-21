@@ -8,6 +8,8 @@ use rkyv::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
+pub mod mmap;
+
 /// Minimal wire-safe representation of a document key.
 #[derive(
     Debug,

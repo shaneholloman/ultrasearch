@@ -503,6 +503,7 @@ dependencies = [
  "anyhow",
  "bincode",
  "core-types",
+ "memmap2",
  "rkyv",
  "serde",
 ]
