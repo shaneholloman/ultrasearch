@@ -9,25 +9,6 @@
 
 UltraSearch represents a fundamental rethinking of desktop search architecture. Rather than treating search as a monolithic application, it decomposes the problem into specialized components that work together seamlessly: a lightweight always-on service for metadata queries, isolated worker processes for resource-intensive content extraction, and a modern GPU-accelerated UI that feels instant.
 
-## Table of Contents
-
-* [Purpose and Motivation](#purpose-and-motivation)
-* [Architecture Overview](#architecture-overview)
-* [Core Data Model](#core-data-model)
-* [NTFS Integration](#ntfs-integration)
-* [Indexing Architecture](#indexing-architecture)
-* [Content Extraction](#content-extraction)
-* [Scheduler and Background Execution](#scheduler-and-background-execution)
-* [IPC Protocol](#ipc-protocol)
-* [Query Execution](#query-execution)
-* [Configuration](#configuration)
-* [Logging and Observability](#logging-and-observability)
-* [Security and Reliability](#security-and-reliability)
-* [Performance Characteristics](#performance-characteristics)
-* [Design Philosophy](#design-philosophy)
-* [Build and Development](#build-and-development)
-* [Future Enhancements](#future-enhancements)
-
 ## Purpose and Motivation
 
 Desktop search tools have historically forced users into a false dichotomy: choose speed or comprehensiveness. UltraSearch eliminates this trade-off by leveraging modern systems programming techniques and Windows-specific optimizations.
