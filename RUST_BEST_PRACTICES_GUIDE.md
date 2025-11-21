@@ -4,12 +4,12 @@ This guide synthesizes modern best practices for building blazingly fast, memory
 
 ## Prerequisites & Toolchain Configuration
 
-Ensure your environment uses **Rust 1.84+** (stable channel), **cargo 1.84+**, and modern tooling. The 2024 edition is now stable and should be your default.
+Ensure your environment uses the **latest Rust nightly** (per AGENTS.md), **cargo nightly**, and modern tooling. The 2024 edition is now stable and should be your default unless nightly exposes required features.
 
 ```toml
 # rust-toolchain.toml - Pin your project to a specific toolchain
 [toolchain]
-channel = "1.84.0"
+channel = "nightly"
 components = ["rustfmt", "clippy", "rust-analyzer"]
 targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc", "wasm32-unknown-unknown"]
 profile = "default"
