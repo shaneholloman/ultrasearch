@@ -7,9 +7,8 @@ use std::path::Path;
 
 use anyhow::Result;
 use core_types::DocKey;
-use tantivy::{
-    Index, IndexSettings, IndexWriter, ReloadPolicy, schema::document::TantivyDocument, schema::*,
-};
+pub use tantivy::IndexWriter;
+use tantivy::{Index, IndexSettings, ReloadPolicy, schema::document::TantivyDocument, schema::*};
 
 /// Field handles for the content index schema.
 #[derive(Debug, Clone)]
