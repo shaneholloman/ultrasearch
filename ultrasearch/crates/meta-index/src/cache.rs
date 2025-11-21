@@ -1,14 +1,12 @@
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use ahash::RandomState;
-use core_types::DocKey;
-use lasso::Rodeo;
+use core_types::{DocKey, FileFlags, FileMeta, Timestamp};
+use lasso::{Rodeo, Spur};
 use lru::LruCache;
-use slotmap::{SlotMap, new_key_type};
-use std::collections::HashMap;
-use core_types::{FileMeta, FileFlags, Timestamp};
-use lasso::Spur;
+use slotmap::{new_key_type, SlotMap};
 
 new_key_type! { pub struct CacheKey; }
 
@@ -84,7 +82,14 @@ impl MetadataCache {
         self.lookup.get(&key).and_then(|&slot| self.slots.get(slot))
     }
 
-    pub fn resolve_path(&mut self, key: DocKey) -> Option<Arc<str>> {
+    /// Resolve the full path for a DocKey, using the cache.
+    ///
+    /// `fetch_miss` is a closure that looks up `FileMeta` from a persistent store (e.g. index)
+    /// if a cache miss occurs. Fetched items are automatically added to the cache.
+    pub fn resolve_path<F>(&mut self, key: DocKey, mut fetch_miss: F) -> Option<Arc<str>>
+    where
+        F: FnMut(DocKey) -> Option<FileMeta>,
+    {
         if let Some(path) = self.path_cache.get(&key) {
             return Some(path.clone());
         }
@@ -93,18 +98,26 @@ impl MetadataCache {
         let mut segments = Vec::new();
 
         loop {
-            if let Some(item) = self.get(current_key) {
-                let name_str = self.interner.resolve(&item.name);
-                segments.push(name_str);
+            let maybe_item = self.get(current_key).map(|item| (item.parent, item.name));
 
-                if let Some(parent) = item.parent {
-                    if parent == current_key { break; }
-                    current_key = parent;
-                } else {
-                    break;
-                }
+            let (parent, name_spur) = if let Some(found) = maybe_item {
+                found
+            } else if let Some(meta) = fetch_miss(current_key) {
+                self.put(&meta);
+                let item = self.get(current_key).unwrap();
+                (item.parent, item.name)
             } else {
                 return None;
+            };
+
+            let name_str = self.interner.resolve(&name_spur).to_owned();
+            segments.push(name_str);
+
+            if let Some(p) = parent {
+                if p == current_key { break; }
+                current_key = p;
+            } else {
+                break;
             }
         }
 
@@ -160,10 +173,39 @@ mod tests {
         cache.put(&make_meta(dir_key, Some(root_key), "Users"));
         cache.put(&make_meta(file_key, Some(dir_key), "test.txt"));
 
-        let path = cache.resolve_path(file_key).expect("should resolve");
+        let path = cache.resolve_path(file_key, |_| None).expect("should resolve");
         #[cfg(windows)]
         assert_eq!(&*path, "C:\\Users\\test.txt");
         #[cfg(not(windows))]
         assert_eq!(&*path, "C:/Users/test.txt");
+    }
+
+    #[test]
+    fn test_path_reconstruction_with_fallback() {
+        let mut cache = MetadataCache::new(10);
+        let root_key = DocKey::from_parts(1, 1);
+        let dir_key = DocKey::from_parts(1, 2);
+        let file_key = DocKey::from_parts(1, 3);
+
+        // Only put root and file in cache, skip dir
+        cache.put(&make_meta(root_key, None, "C:"));
+        cache.put(&make_meta(file_key, Some(dir_key), "test.txt"));
+
+        // Fallback provided for dir
+        let path = cache.resolve_path(file_key, |k| {
+            if k == dir_key {
+                Some(make_meta(dir_key, Some(root_key), "Users"))
+            } else {
+                None
+            }
+        }).expect("should resolve via fallback");
+
+        #[cfg(windows)]
+        assert_eq!(&*path, "C:\\Users\\test.txt");
+        #[cfg(not(windows))]
+        assert_eq!(&*path, "C:/Users/test.txt");
+        
+        // Verify dir is now in cache
+        assert!(cache.get(dir_key).is_some());
     }
 }
