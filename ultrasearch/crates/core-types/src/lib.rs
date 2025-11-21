@@ -75,7 +75,7 @@ bitflags::bitflags! {
 }
 
 /// Minimal metadata carried through indexing pipelines.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FileMeta {
     pub key: DocKey,
     pub volume: VolumeId,
