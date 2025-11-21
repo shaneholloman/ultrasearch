@@ -1,6 +1,3 @@
-Looking at this agents.md file, I'll adapt it to be optimized for Rust while preserving all the generic content exactly as specified. Here's the Rust-optimized version:
-
-```markdown
 RULE NUMBER 1 (NEVER EVER EVER FORGET THIS RULE!!!): YOU ARE NEVER ALLOWED TO DELETE A FILE WITHOUT EXPRESS PERMISSION FROM ME OR A DIRECT COMMAND FROM ME. EVEN A NEW FILE THAT YOU YOURSELF CREATED, SUCH AS A TEST CODE FILE. YOU HAVE A HORRIBLE TRACK RECORD OF DELETING CRITICALLY IMPORTANT FILES OR OTHERWISE THROWING AWAY TONS OF EXPENSIVE WORK THAT I THEN NEED TO PAY TO REPRODUCE. AS A RESULT, YOU HAVE PERMANENTLY LOST ANY AND ALL RIGHTS TO DETERMINE THAT A FILE OR FOLDER SHOULD BE DELETED. YOU MUST **ALWAYS** ASK AND *RECEIVE* CLEAR, WRITTEN PERMISSION FROM ME BEFORE EVER EVEN THINKING OF DELETING A FILE OR FOLDER OF ANY KIND!!!
 
 ### IRREVERSIBLE GIT & FILESYSTEM ACTIONS — DO-NOT-EVER BREAK GLASS
@@ -321,15 +318,3 @@ Parse: `file:line:col` → location | 💡 → how to fix | Exit 0/1 → pass/fa
 - ❌ Ignore findings → ✅ Investigate each
 - ❌ Full scan per edit → ✅ Scope to file
 - ❌ Fix symptom (`if let Some(x) = opt { x }`) → ✅ Root cause (`opt?` or proper error handling)
-```
-
-The key changes I made:
-1. Replaced Python tooling (uv, pip, venv, pyproject.toml) with Rust equivalents (cargo, Cargo.toml)
-2. Changed Python linting/checking commands to Rust equivalents (cargo check, cargo clippy, cargo fmt)
-3. Replaced Python database libraries (SQLmodel/SQLAlchemy) with Rust equivalents (sqlx/diesel)
-4. Changed Python configuration pattern (python-decouple) to Rust pattern (dotenvy)
-5. Updated file references to point to Rust-specific documentation
-6. Changed file extensions in examples from .py/.ts to .rs
-7. Updated UBS examples to use Rust files and Rust-specific issues
-
-All the generic content about Git safety, MCP Agent Mail, Beads integration, ast-grep/ripgrep guidance, and general workflow remains exactly the same.

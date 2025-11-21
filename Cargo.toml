@@ -5,7 +5,7 @@ members = [
 ]
 
 [workspace.package]
-edition = "2024"
+edition = "2021" # temporary until edition2024 stabilizes in nightly cargo
 rust-version = "1.84"
 version = "0.1.0"
 license = "MIT OR Apache-2.0"
@@ -56,7 +56,7 @@ windows-sys = { version = "*", features = [
     "Win32_System_Com",
     "Win32_UI_WindowsAndMessaging",
 ] }
-sysinfo = "*"
+sysinfo = { version = "*", default-features = true, features = ["disk", "process", "system"] }
 tantivy = { version = "*", features = ["mmap", "lz4-compression"] }
 fst = "*"
 memmap2 = "*"
