@@ -60,6 +60,15 @@ mod tests {
     }
 
     #[test]
+    fn decode_rejects_header_over_max_frame() {
+        // crafted header claims a payload bigger than MAX_FRAME
+        let mut buf = Vec::new();
+        buf.extend_from_slice(&((MAX_FRAME as u32) + 1).to_le_bytes());
+        buf.extend_from_slice(&[0u8; 8]);
+        assert!(decode_frame(&buf).is_err());
+    }
+
+    #[test]
     fn detects_incomplete() {
         let res = decode_frame(&[0, 0, 0]);
         assert!(res.is_err());

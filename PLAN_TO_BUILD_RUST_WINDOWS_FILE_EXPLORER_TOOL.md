@@ -2,6 +2,8 @@ At a high level you’re building:
 
 **Progress log**
 - 2025-11-20 (PinkPond): Started bead ultrasearch-c00.1.1 – pin toolchain/config; added rust-toolchain.toml and .cargo/config.toml per best-practices. No code changes yet.
+- 2025-11-20 to 2025-11-21 (LilacCat): c00.3 scaffolding in ntfs-watcher/meta-index (types, schema, helpers, tests); c00.5 scaffolding in content-extractor (extractor stack, limits, tests); config doc additions for extraction/scheduler; core-types config defaults/tests; misc small tests. Workspace fix still pending manifest window.
+- 2025-11-21 (LilacCat): Nightly + wildcard policy noted; plan to run c00.1.2 as soon as manifests free to fix workspace members, remove optional hnsw_rs from workspace deps, and align editions/toolchain to the new mandate.
 
 * an **NTFS + USN–driven catalog** for filenames and metadata (Everything‑style),
 * a **Tantivy‑based full‑text engine** for contents,
@@ -932,23 +934,31 @@ Refer to:
 
 - `ADVANCED_FEATURES.md` for the full specification of advanced capabilities.
 - `CONFIG_REFERENCE.md` (to be added) for the complete configuration surface,
-  including per‑feature toggles and tuning parameters.
+  including per-feature toggles and tuning parameters.
 
 Implementation strategy:
 
 - Introduce the advanced modules behind feature flags and configuration gates.
 - Roll them out in this order:
-  1. Multi‑tier layout + delta index.
-  2. Query planner + doc‑type analyzers.
+  1. Multi-tier layout + delta index.
+  2. Query planner + doc-type analyzers.
   3. Adaptive scheduler.
   4. Log indexing.
   5. Plugin system.
   6. Semantic search.
   7. Memory and allocator tuning.
-  8. Observability and auto‑tuning.
+  8. Observability and auto-tuning.
 
 This staged approach keeps the system shippable at each step while steadily increasing
 performance, versatility, and power without regressing footprint or reliability.
+
+---
+
+### Progress log — 2025-11-21
+
+- Workspace fix in progress (c00.1.2): root members updated to `ultrasearch/crates/*`; optional `hnsw_rs` removed from workspace deps (now crate-level optional in `semantic-index`); `ultrasearch/Cargo.toml` neutralized to avoid nested workspace.
+- Toolchain set to nightly per new policy; workspace deps switched to wildcards to track latest crates pending stabilization.
+- Recent scaffolding (for traceability): meta-index add_batch helper + RamDirectory test; ntfs-watcher trait/cursor; content-index schema/helpers; IPC query AST; scheduler idle/load + queues scaffolding; content-extractor limits/fields adjusted.
 
 ---
 
