@@ -17,7 +17,7 @@ use crate::{
     meta_ingest::ingest_with_paths,
     metrics::{init_metrics_from_config, set_global_metrics},
     scheduler_runtime::SchedulerRuntime,
-    search_handler::{MetaIndexSearchHandler, set_search_handler},
+    search_handler::set_search_handler,
     status_provider::{
         init_basic_status_provider, update_status_last_commit, update_status_volumes,
     },
@@ -65,11 +65,15 @@ pub fn run_app(cfg: &AppConfig, mut shutdown_rx: mpsc::Receiver<()>) -> Result<(
         }
     });
 
-    // Try to install metadata search handler (optional; fallback is stub).
-    if let Ok(handler) = MetaIndexSearchHandler::try_new(Path::new(&cfg.paths.meta_index)) {
+    // Try to install unified search handler.
+    // We pass both meta and content index paths.
+    let meta_path = Path::new(&cfg.paths.meta_index);
+    let content_path = Path::new(&cfg.paths.content_index);
+    
+    if let Ok(handler) = crate::search_handler::UnifiedSearchHandler::try_new(meta_path, content_path) {
         set_search_handler(Box::new(handler));
     } else {
-        tracing::warn!("meta-index search handler not initialized; falling back to stub");
+        tracing::warn!("unified search handler not initialized; falling back to stub");
     }
 
     #[cfg(target_os = "windows")]
