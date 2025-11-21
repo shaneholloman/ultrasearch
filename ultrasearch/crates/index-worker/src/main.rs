@@ -142,6 +142,7 @@ fn load_jobs(job_file: &PathBuf) -> Result<Vec<JobSpec>> {
     #[derive(Debug, Deserialize)]
     struct JobFile {
         version: u32,
+        #[serde(default)]
         jobs: Vec<JobSpec>,
     }
 
@@ -149,6 +150,9 @@ fn load_jobs(job_file: &PathBuf) -> Result<Vec<JobSpec>> {
         Ok(batch) => {
             if batch.version != 1 {
                 anyhow::bail!("unsupported job file version {}", batch.version);
+            }
+            if batch.jobs.is_empty() {
+                anyhow::bail!("job file contains no jobs");
             }
             Ok(batch.jobs)
         }
@@ -158,6 +162,9 @@ fn load_jobs(job_file: &PathBuf) -> Result<Vec<JobSpec>> {
             let jobs: Vec<JobSpec> = serde_json::from_reader(file).with_context(|| {
                 format!("failed to parse legacy job array: {}", job_file.display())
             })?;
+            if jobs.is_empty() {
+                anyhow::bail!("legacy job array is empty");
+            }
             Ok(jobs)
         }
     }
