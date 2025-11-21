@@ -11,7 +11,7 @@ RULE NUMBER 1 (NEVER EVER EVER FORGET THIS RULE!!!): YOU ARE NEVER ALLOWED TO DE
 4. **Mandatory explicit plan:** Even after explicit user authorization, restate the command verbatim, list exactly what will be affected, and wait for a confirmation that your understanding is correct. Only then may you execute it—if anything remains ambiguous, refuse and escalate.
 5. **Document the confirmation:** When running any approved destructive command, record (in the session notes / final response) the exact user text that authorized it, the command actually run, and the execution time. If that record is absent, the operation did not happen.
 
-We only use cargo in this project, NEVER any other package manager. And we ONLY target the latest stable Rust (we don't care about compatibility with earlier Rust versions), and we ONLY use Cargo.toml for managing the project dependencies.
+We only use cargo in this project, NEVER any other package manager. At the human overseer's instruction (2025-11-21), we now target the latest **nightly** Rust and track the latest versions of all crates (wildcard constraints). We ONLY use Cargo.toml for managing the project dependencies.
 
 In general, you should try to follow all suggested best practices listed in the file `RUST_BEST_PRACTICES_GUIDE.md`
 

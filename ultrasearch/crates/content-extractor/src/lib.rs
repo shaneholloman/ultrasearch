@@ -65,9 +65,8 @@ impl ExtractorStack {
                 return backend.extract(ctx, key).map_err(|e| e.into());
             }
         }
-        Err(anyhow::anyhow!(ExtractError::Unsupported(
-            ctx.ext_hint.unwrap_or("unknown").to_string()
-        )))
+        let ext = resolve_ext(ctx).unwrap_or_else(|| "unknown".to_string());
+        Err(anyhow::anyhow!(ExtractError::Unsupported(ext)))
     }
 }
 
@@ -85,10 +84,10 @@ impl Extractor for NoopExtractor {
     }
 
     fn extract(&self, ctx: &ExtractContext, key: DocKey) -> Result<ExtractedContent, ExtractError> {
-        let truncated = false;
+        let (text, truncated) = enforce_limits_str("", ctx);
         Ok(ExtractedContent {
             key,
-            text: String::new(),
+            text,
             lang: None,
             truncated,
             content_lang: None,
@@ -106,9 +105,13 @@ impl Extractor for SimpleTextExtractor {
     }
 
     fn supports(&self, ctx: &ExtractContext) -> bool {
-        match ctx.ext_hint.unwrap_or("").to_ascii_lowercase().as_str() {
-            "txt" | "log" | "md" | "json" | "jsonl" | "toml" | "rs" | "ts" | "tsx" => true,
-            _ => false,
+        if let Some(ext) = resolve_ext(ctx) {
+            matches!(
+                ext.as_str(),
+                "txt" | "log" | "md" | "json" | "jsonl" | "toml" | "rs" | "ts" | "tsx" | "csv"
+            )
+        } else {
+            false
         }
     }
 
@@ -119,13 +122,8 @@ impl Extractor for SimpleTextExtractor {
             return Err(ExtractError::Unsupported("file too large for simple extractor".into()));
         }
 
-        let mut text = fs::read_to_string(path).map_err(|e| ExtractError::Failed(e.to_string()))?;
-        let truncated = if text.len() > ctx.max_chars {
-            text.truncate(ctx.max_chars);
-            true
-        } else {
-            false
-        };
+        let text_raw = fs::read_to_string(path).map_err(|e| ExtractError::Failed(e.to_string()))?;
+        let (text, truncated) = enforce_limits_str(&text_raw, ctx);
 
         Ok(ExtractedContent {
             key,
@@ -133,30 +131,42 @@ impl Extractor for SimpleTextExtractor {
             lang: None,
             truncated,
             content_lang: None,
-            bytes_processed: meta.len() as usize,
+            bytes_processed: std::cmp::min(meta.len() as usize, ctx.max_bytes),
         })
     }
 }
 
-/// Truncate helper applied by real extractors to enforce `max_chars`.
-pub fn enforce_char_limit(text: &str, max_chars: usize) -> (String, bool) {
-    if text.chars().count() > max_chars {
-        let trimmed: String = text.chars().take(max_chars).collect();
-        (trimmed, true)
-    } else {
-        (text.to_string(), false)
+/// Enforce both byte and char limits on an in-memory string.
+pub fn enforce_limits_str(text: &str, ctx: &ExtractContext) -> (String, bool) {
+    let mut bytes = 0usize;
+    let mut chars = 0usize;
+    let mut truncated = false;
+    let mut out = String::with_capacity(text.len().min(ctx.max_bytes));
+
+    for ch in text.chars() {
+        let ch_len = ch.len_utf8();
+        if bytes + ch_len > ctx.max_bytes || chars + 1 > ctx.max_chars {
+            truncated = true;
+            break;
+        }
+        out.push(ch);
+        bytes += ch_len;
+        chars += 1;
     }
+
+    (out, truncated)
 }
 
-/// Utility to enforce both byte and char limits, returning None if too large.
-pub fn enforce_limits(path: &Path, ctx: &ExtractContext) -> Result<Option<String>, ExtractError> {
-    let meta = fs::metadata(path).map_err(|e| ExtractError::Failed(e.to_string()))?;
-    if meta.len() as usize > ctx.max_bytes {
-        return Ok(None);
+fn resolve_ext(ctx: &ExtractContext) -> Option<String> {
+    if let Some(ext) = ctx.ext_hint {
+        if !ext.is_empty() {
+            return Some(ext.to_ascii_lowercase());
+        }
     }
-    let text = fs::read_to_string(path).map_err(|e| ExtractError::Failed(e.to_string()))?;
-    let (text, truncated) = enforce_char_limit(&text, ctx.max_chars);
-    Ok(Some(text))
+    std::path::Path::new(ctx.path)
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase())
 }
 
 #[cfg(test)]
@@ -170,6 +180,7 @@ mod tests {
             max_bytes: 1024,
             max_chars: 1024,
             ext_hint: Some("txt"),
+            mime_hint: None,
         };
         let stack = ExtractorStack::new(vec![Box::new(NoopExtractor)]);
         let out = stack.extract(DocKey::from_parts(1, 42), &ctx).unwrap();
@@ -178,10 +189,60 @@ mod tests {
     }
 
     #[test]
-    fn enforce_char_limit_truncates() {
+    fn enforce_limits_truncates_on_chars() {
         let s = "abcdef";
-        let (trimmed, was_truncated) = enforce_char_limit(s, 3);
+        let ctx = ExtractContext {
+            path: "dummy",
+            max_bytes: 1024,
+            max_chars: 3,
+            ext_hint: None,
+            mime_hint: None,
+        };
+        let (trimmed, was_truncated) = enforce_limits_str(s, &ctx);
         assert_eq!(trimmed, "abc");
         assert!(was_truncated);
+    }
+
+    #[test]
+    fn enforce_limits_truncates_on_bytes_with_utf8() {
+        let s = "ééé"; // 6 bytes, 3 chars
+        let ctx = ExtractContext {
+            path: "dummy",
+            max_bytes: 3, // allow only one char (2 bytes)
+            max_chars: 10,
+            ext_hint: None,
+            mime_hint: None,
+        };
+        let (trimmed, truncated) = enforce_limits_str(s, &ctx);
+        assert_eq!(trimmed, "é");
+        assert!(truncated);
+    }
+
+    #[test]
+    fn enforce_limits_truncates_on_bytes_plain_ascii() {
+        let s = "0123456789"; // 10 bytes
+        let ctx = ExtractContext {
+            path: "dummy",
+            max_bytes: 5,
+            max_chars: 10,
+            ext_hint: None,
+            mime_hint: None,
+        };
+        let (trimmed, truncated) = enforce_limits_str(s, &ctx);
+        assert_eq!(trimmed, "01234");
+        assert!(truncated);
+    }
+
+    #[test]
+    fn supports_falls_back_to_path_extension() {
+        let ctx = ExtractContext {
+            path: "/tmp/file.TXT",
+            max_bytes: 1024,
+            max_chars: 1024,
+            ext_hint: None,
+            mime_hint: None,
+        };
+        let simple = SimpleTextExtractor;
+        assert!(simple.supports(&ctx));
     }
 }

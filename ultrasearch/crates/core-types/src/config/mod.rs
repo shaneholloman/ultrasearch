@@ -207,10 +207,14 @@ pub struct SchedulerSection {
     pub idle_warm_seconds: u64,
     #[serde(default = "default_idle_deep")]
     pub idle_deep_seconds: u64,
-    #[serde(default = "default_cpu_low")]
-    pub cpu_low_pct: u64,
-    #[serde(default = "default_cpu_mid")]
-    pub cpu_mid_pct: u64,
+    #[serde(default = "default_max_records_per_tick")]
+    pub max_records_per_tick: u64,
+    #[serde(default = "default_usn_chunk_bytes")]
+    pub usn_chunk_bytes: u64,
+    #[serde(default = "default_cpu_soft")]
+    pub cpu_soft_limit_pct: u64,
+    #[serde(default = "default_cpu_hard")]
+    pub cpu_hard_limit_pct: u64,
     #[serde(default = "default_disk_busy")]
     pub disk_busy_bytes_per_s: u64,
     #[serde(default = "default_content_batch")]
@@ -222,8 +226,10 @@ impl Default for SchedulerSection {
         Self {
             idle_warm_seconds: default_idle_warm(),
             idle_deep_seconds: default_idle_deep(),
-            cpu_low_pct: default_cpu_low(),
-            cpu_mid_pct: default_cpu_mid(),
+            max_records_per_tick: default_max_records_per_tick(),
+            usn_chunk_bytes: default_usn_chunk_bytes(),
+            cpu_soft_limit_pct: default_cpu_soft(),
+            cpu_hard_limit_pct: default_cpu_hard(),
             disk_busy_bytes_per_s: default_disk_busy(),
             content_batch_size: default_content_batch(),
         }
@@ -236,11 +242,17 @@ fn default_idle_warm() -> u64 {
 fn default_idle_deep() -> u64 {
     60
 }
-fn default_cpu_low() -> u64 {
-    20
+fn default_max_records_per_tick() -> u64 {
+    10_000
 }
-fn default_cpu_mid() -> u64 {
+fn default_usn_chunk_bytes() -> u64 {
+    1 * 1024 * 1024
+}
+fn default_cpu_soft() -> u64 {
     50
+}
+fn default_cpu_hard() -> u64 {
+    80
 }
 fn default_disk_busy() -> u64 {
     10 * 1024 * 1024
@@ -291,8 +303,8 @@ fn default_jobs_dir() -> String {
 pub struct ExtractSection {
     #[serde(default = "default_max_bytes")]
     pub max_bytes_per_file: u64,
-    #[serde(default = "default_max_chars")]
-    pub max_chars: u64,
+    #[serde(default = "default_max_chars", alias = "max_chars")]
+    pub max_chars_per_file: u64,
     #[serde(default)]
     pub ocr_enabled: bool,
     #[serde(default = "default_ocr_max_pages")]
@@ -303,7 +315,7 @@ impl Default for ExtractSection {
     fn default() -> Self {
         Self {
             max_bytes_per_file: default_max_bytes(),
-            max_chars: default_max_chars(),
+            max_chars_per_file: default_max_chars(),
             ocr_enabled: false,
             ocr_max_pages: default_ocr_max_pages(),
         }

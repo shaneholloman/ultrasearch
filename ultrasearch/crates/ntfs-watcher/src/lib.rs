@@ -43,6 +43,7 @@ pub enum FileEvent {
 
 /// Configuration knobs for NTFS/USN access.
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // will be wired when Win32 integrations land
 pub struct ReaderConfig {
     pub chunk_size: usize,
     pub max_records_per_tick: usize,
@@ -130,5 +131,12 @@ mod tests {
         let (vol, frn) = doc.into_parts();
         assert_eq!(vol, 42);
         assert_eq!(frn, 1_234_567_890);
+    }
+
+    #[test]
+    fn reader_config_defaults_are_sane() {
+        let cfg = ReaderConfig::default();
+        assert_eq!(cfg.chunk_size, 1 << 20);
+        assert_eq!(cfg.max_records_per_tick, 10_000);
     }
 }

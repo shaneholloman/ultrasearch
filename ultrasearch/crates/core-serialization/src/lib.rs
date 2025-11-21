@@ -103,4 +103,12 @@ mod tests {
         let round: Small = from_rkyv_bytes(&bytes).unwrap();
         assert_eq!(round, s);
     }
+
+    #[test]
+    fn rkyv_helpers_fail_with_invalid_input() {
+        // Provide too-short bytes to trigger validation failure.
+        let bytes = [0_u8, 1, 2, 3];
+        let err = from_rkyv_bytes::<Small>(&bytes);
+        assert!(err.is_err());
+    }
 }
