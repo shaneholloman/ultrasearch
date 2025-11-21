@@ -72,8 +72,9 @@ impl PipeClient {
         Req: Serialize,
         Resp: DeserializeOwned,
     {
-        let cfg = bincode::config::standard();
-        let payload = bincode::serde::encode_to_vec(req, cfg)?;
+        // Serialize payload
+        let payload = bincode::serialize(req)?;
+        // Frame it (adds length header)
         let framed = framing::encode_frame(&payload)?;
 
         let mut attempt = 0;
@@ -85,21 +86,27 @@ impl PipeClient {
                     .open(&self.pipe_name)
                     .with_context(|| format!("connect to pipe {}", self.pipe_name))?;
 
-                let len = framed.len() as u32;
-                conn.write_all(&len.to_le_bytes()).await?;
+                // Write the framed request
                 conn.write_all(&framed).await?;
 
+                // Read response header
                 let mut len_buf = [0u8; 4];
                 conn.read_exact(&mut len_buf).await?;
                 let resp_len = u32::from_le_bytes(len_buf) as usize;
+                
                 if resp_len == 0 || resp_len > MAX_MESSAGE_BYTES {
                     bail!("invalid response length {}", resp_len);
                 }
 
+                // Read response body
                 let mut buf = vec![0u8; resp_len];
                 conn.read_exact(&mut buf).await?;
-                let (payload, _rem) = framing::decode_frame(&buf)?;
-                let (resp, _): (Resp, _) = bincode::serde::decode_from_slice(&payload, cfg)?;
+                
+                // Deserialize directly from the body buffer
+                // (framing::decode_frame expects [header + body], but we already consumed header.
+                // Since we trust the stream logic here, we can skip using decode_frame logic for the buffer check
+                // and just deserialize the body.)
+                let resp: Resp = bincode::deserialize(&buf)?;
                 Ok(resp)
             };
 
@@ -117,7 +124,7 @@ impl PipeClient {
 
             attempt += 1;
             if attempt <= self.retries {
-                sleep(self.backoff * attempt).await;
+                sleep(self.backoff * attempt.min(10)).await;
             }
         }
 
