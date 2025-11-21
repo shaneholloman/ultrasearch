@@ -9,6 +9,7 @@ use ipc::{
     VolumeStatus,
 };
 use service::metrics::{global_metrics_snapshot, record_ipc_request};
+use service::search_handler::search;
 use service::status::make_status_response;
 use service::status_provider::status_snapshot;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -103,18 +104,18 @@ fn dispatch(payload: &[u8]) -> Vec<u8> {
         record_ipc_request(started.elapsed());
         return encoded;
     }
-    // Fallback: return a well-formed empty SearchResponse for now.
+    // Fallback: dispatch SearchRequest.
     if let Ok(req) = bincode::deserialize::<SearchRequest>(payload) {
         let start = Instant::now();
+        let mut resp = search(req);
         let elapsed = start.elapsed();
-        let resp = SearchResponse {
-            id: req.id,
-            hits: Vec::new(),
-            total: 0,
-            truncated: false,
-            took_ms: elapsed.as_millis().min(u32::MAX as u128) as u32,
-            served_by: Some(host_label()),
-        };
+        let took = elapsed.as_millis().min(u32::MAX as u128) as u32;
+        if resp.took_ms == 0 {
+            resp.took_ms = took;
+        }
+        if resp.served_by.is_none() {
+            resp.served_by = Some(host_label());
+        }
         let encoded = bincode::serialize(&resp).unwrap_or_default();
         record_ipc_request(elapsed);
         return encoded;
@@ -154,6 +155,7 @@ mod tests {
         assert_eq!(resp.id, req.id);
         assert!(resp.volumes.is_empty());
         assert_eq!(resp.metrics.as_ref().and_then(|m| m.queue_depth), Some(0));
+        assert!(resp.served_by.is_some());
     }
 
     #[test]

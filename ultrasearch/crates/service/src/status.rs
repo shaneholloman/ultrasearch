@@ -1,5 +1,5 @@
 use ipc::{MetricsSnapshot, StatusResponse, VolumeStatus};
-use std::time::SystemTime;
+use std::{env, time::SystemTime};
 
 /// Build a StatusResponse from provided fragments.
 ///
@@ -17,6 +17,7 @@ pub fn make_status_response(
         scheduler_state,
         last_index_commit_ts: last_index_commit_ts.or_else(now_ts),
         metrics,
+        served_by: Some(host_label()),
     }
 }
 
@@ -25,6 +26,12 @@ fn now_ts() -> Option<i64> {
         .duration_since(SystemTime::UNIX_EPOCH)
         .ok()
         .map(|d| d.as_secs() as i64)
+}
+
+fn host_label() -> String {
+    env::var("COMPUTERNAME")
+        .or_else(|_| env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "service".into())
 }
 
 #[cfg(test)]
@@ -36,5 +43,6 @@ mod tests {
     fn populates_defaults() {
         let resp = make_status_response(Uuid::nil(), vec![], "idle".into(), None, None);
         assert!(resp.last_index_commit_ts.is_some());
+        assert!(resp.served_by.is_some());
     }
 }
