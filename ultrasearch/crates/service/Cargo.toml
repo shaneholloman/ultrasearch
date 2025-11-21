@@ -23,5 +23,3 @@ meta-index = { path = "../meta-index" }
 content-index = { path = "../content-index" }
 ntfs-watcher = { path = "../ntfs-watcher" }
 prometheus = "0.13"
-cargo-features = ["edition2024"]
-cargo-features = ["edition2024"]

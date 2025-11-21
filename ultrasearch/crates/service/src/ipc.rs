@@ -1,6 +1,7 @@
 #![cfg(target_os = "windows")]
 
 use anyhow::Result;
+use ipc::{SearchRequest, StatusRequest, StatusResponse};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
@@ -48,17 +49,30 @@ async fn handle_connection(conn: &mut NamedPipeServer) -> Result<()> {
         }
         let mut buf = vec![0u8; len];
         conn.read_exact(&mut buf).await?;
-        // For now echo the request id if present; real dispatch will live in service.
-        // This keeps the pipeline compile-ready and testable.
-        let response = echo_id(&buf);
+        let response = dispatch(&buf);
         conn.write_all(&(response.len() as u32).to_le_bytes()).await?;
         conn.write_all(&response).await?;
     }
     Ok(())
 }
 
-fn echo_id(payload: &[u8]) -> Vec<u8> {
-    // Best-effort: if payload decodes as a UUID (first 16 bytes), echo it back.
+fn dispatch(payload: &[u8]) -> Vec<u8> {
+    // Try StatusRequest first.
+    if let Ok(req) = bincode::deserialize::<StatusRequest>(payload) {
+        let resp = StatusResponse {
+            id: req.id,
+            volumes: Vec::new(),
+            last_index_commit_ts: None,
+            scheduler_state: "unknown".into(),
+            metrics: None,
+        };
+        return bincode::serialize(&resp).unwrap_or_default();
+    }
+    // Fallback: echo SearchRequest id.
+    if let Ok(req) = bincode::deserialize::<SearchRequest>(payload) {
+        return bincode::serialize(&req.id).unwrap_or_default();
+    }
+    // If payload decodes as a UUID prefix, echo it back.
     if payload.len() >= 16 {
         if let Ok(id) = Uuid::from_slice(&payload[..16]) {
             return id.as_bytes().to_vec();
@@ -74,7 +88,35 @@ mod tests {
     #[tokio::test]
     async fn echoes_uuid_prefix() {
         let id = Uuid::new_v4();
-        let resp = echo_id(id.as_bytes());
+        let resp = dispatch(id.as_bytes());
         assert_eq!(resp, id.as_bytes());
+    }
+
+    #[test]
+    fn status_request_roundtrip() {
+        let req = StatusRequest { id: Uuid::new_v4() };
+        let resp_bytes = dispatch(&bincode::serialize(&req).unwrap());
+        let resp: StatusResponse = bincode::deserialize(&resp_bytes).unwrap();
+        assert_eq!(resp.id, req.id);
+        assert!(resp.volumes.is_empty());
+    }
+
+    #[test]
+    fn search_request_echoes_id() {
+        let req = SearchRequest {
+            id: Uuid::new_v4(),
+            query: ipc::QueryExpr::Term(ipc::TermExpr {
+                field: None,
+                value: "x".into(),
+                modifier: ipc::TermModifier::Term,
+            }),
+            limit: 1,
+            mode: ipc::SearchMode::Auto,
+            timeout: None,
+            offset: 0,
+        };
+        let resp_bytes = dispatch(&bincode::serialize(&req).unwrap());
+        let echoed: Uuid = bincode::deserialize(&resp_bytes).unwrap();
+        assert_eq!(echoed, req.id);
     }
 }

@@ -13,3 +13,4 @@ ipc = { path = "../ipc" }
 core-types = { path = "../core-types" }
 console = { workspace = true }
 indicatif = { workspace = true }
+serde_json = { workspace = true }

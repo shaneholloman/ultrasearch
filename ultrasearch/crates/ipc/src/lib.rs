@@ -257,5 +257,19 @@ mod tests {
         assert_eq!(back.queue_depth, Some(5));
         assert_eq!(back.active_workers, Some(2));
     }
+
+    #[test]
+    fn search_request_default_is_reasonable() {
+        let req = SearchRequest::default();
+        assert_eq!(req.id, Uuid::nil());
+        assert_eq!(req.limit, 50);
+        assert!(matches!(req.mode, SearchMode::Auto));
+        assert_eq!(req.timeout, None);
+        assert_eq!(req.offset, 0);
+        match req.query {
+            QueryExpr::And(items) => assert!(items.is_empty()),
+            _ => panic!("default query should be And([])"),
+        }
+    }
 }
 }

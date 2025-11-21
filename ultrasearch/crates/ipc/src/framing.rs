@@ -8,6 +8,9 @@ pub fn encode_frame(payload: &[u8]) -> Result<Vec<u8>> {
     if payload.len() > MAX_FRAME {
         bail!("frame too large: {} bytes", payload.len());
     }
+    if payload.len() > u32::MAX as usize {
+        bail!("frame exceeds u32 length: {} bytes", payload.len());
+    }
     let mut buf = Vec::with_capacity(4 + payload.len());
     buf.extend_from_slice(&(payload.len() as u32).to_le_bytes());
     buf.extend_from_slice(payload);
@@ -47,6 +50,12 @@ mod tests {
     #[test]
     fn guards_frame_size() {
         let big = vec![0u8; MAX_FRAME + 1];
+        assert!(encode_frame(&big).is_err());
+    }
+
+    #[test]
+    fn guards_u32_overflow() {
+        let big = vec![0u8; (u32::MAX as usize) + 1];
         assert!(encode_frame(&big).is_err());
     }
 

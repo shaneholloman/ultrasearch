@@ -261,4 +261,16 @@ mod tests {
         let simple = SimpleTextExtractor;
         assert!(simple.supports(&ctx));
     }
+
+    #[test]
+    fn resolve_ext_prefers_hint_over_path() {
+        let ctx = ExtractContext {
+            path: "/tmp/file.md",
+            max_bytes: 10,
+            max_chars: 10,
+            ext_hint: Some("txt"),
+            mime_hint: None,
+        };
+        assert_eq!(resolve_ext(&ctx).as_deref(), Some("txt"));
+    }
 }
