@@ -1,17 +1,22 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::{Parser, Subcommand, ValueEnum};
 use console::style;
-use ipc::{
-    FieldKind, QueryExpr, RangeExpr, RangeOp, RangeValue, SearchMode, SearchRequest, TermExpr,
-    TermModifier,
-};
 use ipc::framing;
+use ipc::{
+    FieldKind, QueryExpr, RangeExpr, RangeOp, RangeValue, SearchMode, SearchRequest,
+    SearchResponse, TermExpr, TermModifier,
+};
 use ipc::{StatusRequest, StatusResponse};
+use serde_json::json;
 use uuid::Uuid;
 
 /// Debug / scripting CLI for UltraSearch IPC.
 #[derive(Parser, Debug)]
-#[command(name = "ultrasearch-cli", version, about = "UltraSearch debug/diagnostic client")]
+#[command(
+    name = "ultrasearch-cli",
+    version,
+    about = "UltraSearch debug/diagnostic client"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -35,9 +40,16 @@ enum Commands {
         /// Optional timeout in milliseconds.
         #[arg(long)]
         timeout_ms: Option<u64>,
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
     },
     /// Request service status.
-    Status {},
+    Status {
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum)]
@@ -51,15 +63,26 @@ enum ModeArg {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Search { query, limit, offset, mode, timeout_ms } => {
+        Commands::Search {
+            query,
+            limit,
+            offset,
+            mode,
+            timeout_ms,
+            json,
+        } => {
             let req = build_search_request(&query, limit, offset, timeout_ms, mode);
             print_request(&req)?;
             send_stub(req)?.map(|resp| {
-                println!("{}", style("Response (stubbed):").yellow());
-                println!("{resp:#?}");
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&resp)?);
+                } else {
+                    print_search_response(&resp)?;
+                }
+                Ok::<_, anyhow::Error>(())
             })?;
         }
-        Commands::Status {} => {
+        Commands::Status { json } => {
             let req = build_status_request();
             println!("{}", style("Sending status request (stub framing):").cyan());
             let framed = framing::encode_frame(&bincode::serialize(&req)?)?;
@@ -72,7 +95,11 @@ fn main() -> Result<()> {
                 scheduler_state: "unknown".into(),
                 metrics: None,
             };
-            print_status_response(&resp)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&resp)?);
+            } else {
+                print_status_response(&resp)?;
+            }
         }
     }
     Ok(())
@@ -118,17 +145,55 @@ fn build_status_request() -> StatusRequest {
 
 fn print_status_response(resp: &StatusResponse) -> Result<()> {
     println!("{}", style("Status response (stubbed):").yellow());
-    println!("Volumes: {}", resp.volumes.len());
     println!("Scheduler: {}", resp.scheduler_state);
+    println!("Volumes: {}", resp.volumes.len());
+    for v in &resp.volumes {
+        println!(
+            "- vol {:02} indexed {} pending {}",
+            v.volume, v.indexed_files, v.pending_files
+        );
+    }
     Ok(())
 }
 
-/// Placeholder transport: bincode roundtrip to prove serialization.
-fn send_stub(req: SearchRequest) -> Result<SearchRequest> {
+fn print_search_response(resp: &SearchResponse) -> Result<()> {
+    println!("{}", style("Hits:").cyan());
+    for (i, hit) in resp.hits.iter().enumerate() {
+        println!(
+            "{:3}. {:<40} {:<6} score={:.3} path={}",
+            i + 1,
+            hit.name.as_deref().unwrap_or("<unknown>"),
+            hit.ext.as_deref().unwrap_or(""),
+            hit.score,
+            hit.path.as_deref().unwrap_or("")
+        );
+    }
+    println!(
+        "{}",
+        style(format!(
+            "shown {} / total {} (truncated: {}) took_ms: {}",
+            resp.hits.len(),
+            resp.total,
+            resp.truncated,
+            resp.took_ms
+        ))
+        .green()
+    );
+    Ok(())
+}
+
+/// Placeholder transport: bincode roundtrip and fabricate an empty response.
+fn send_stub(req: SearchRequest) -> Result<SearchResponse> {
     let bytes = bincode::serialize(&req)?;
-    // Frame/unframe for parity with pipe protocol.
     let framed = framing::encode_frame(&bytes)?;
     let (payload, _rem) = framing::decode_frame(&framed)?;
-    let back: SearchRequest = bincode::deserialize(&payload)?;
-    Ok(back)
+    let _back: SearchRequest = bincode::deserialize(&payload)?;
+
+    Ok(SearchResponse {
+        id: req.id,
+        hits: Vec::new(),
+        total: 0,
+        truncated: false,
+        took_ms: 0,
+    })
 }
