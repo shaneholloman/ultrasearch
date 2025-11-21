@@ -526,10 +526,10 @@ mod tests {
     #[test]
     fn extract_section_alias_for_max_chars() {
         // Ensure legacy "max_chars" still deserializes via alias.
-        let toml_str = r#"""
+        let toml_str = r#"
             [extract]
             max_chars = 12345
-        """#;
+        "#;
         let cfg: AppConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(cfg.extract.max_chars_per_file, 12_345);
     }

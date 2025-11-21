@@ -43,7 +43,7 @@ impl DocKey {
 impl core::fmt::Display for DocKey {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let (v, id) = self.into_parts();
-        write!(f, "{}:{:#013x}", v, id)
+        write!(f, "{}:{:#014x}", v, id)
     }
 }
 
