@@ -9,7 +9,9 @@ use std::path::Path;
 
 use anyhow::Result;
 use core_types::DocKey;
-use tantivy::{Index, IndexSettings, IndexWriter, schema::document::TantivyDocument, schema::*};
+use tantivy::{
+    Index, IndexWriter, ReloadPolicy, schema::document::TantivyDocument, schema::*,
+};
 
 /// Fields used in the metadata index.
 #[derive(Debug, Clone)]
@@ -96,11 +98,10 @@ pub struct MetaIndex {
 /// directory manually.
 pub fn open_or_create_index(path: &Path) -> Result<MetaIndex> {
     let (schema, fields) = build_schema();
-    let settings = IndexSettings::default();
     let index = if path.join("meta.json").exists() {
         Index::open_in_dir(path)?
     } else {
-        Index::create_in_dir(path, schema, settings)?
+        Index::create_in_dir(path, schema)?
     };
     Ok(MetaIndex { index, fields })
 }
@@ -167,7 +168,7 @@ mod tests {
         let dir = RamDirectory::create();
         let (schema, fields) = build_schema();
         let index = Index::create(dir, schema)?;
-        let mut writer = index.writer(50_000_000)?;
+        let mut writer = index.writer_with_num_threads(1, 50_000_000)?;
 
         let docs = vec![
             MetaDoc {
@@ -199,7 +200,7 @@ mod tests {
 
         let reader = index
             .reader_builder()
-            .reload_policy(tantivy::ReloadPolicy::OnCommit)
+            .reload_policy(ReloadPolicy::OnCommitWithDelay)
             .try_into()?;
         let searcher = reader.searcher();
 
@@ -207,7 +208,7 @@ mod tests {
         let top_docs = searcher.search(&all, &tantivy::collector::TopDocs::with_limit(10))?;
         assert_eq!(top_docs.len(), 2);
 
-        let doc = searcher.doc(top_docs[0].1)?;
+        let doc: TantivyDocument = searcher.doc(top_docs[0].1)?;
         let doc_key = doc.get_first(fields.doc_key).unwrap().as_u64().unwrap();
         assert!(doc_key == docs[0].key.0 || doc_key == docs[1].key.0);
         Ok(())

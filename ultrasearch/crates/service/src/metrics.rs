@@ -1,7 +1,7 @@
 use anyhow::Result;
 use core_types::config::MetricsSection;
 use once_cell::sync::Lazy;
-use prometheus::{opts, Encoder, Histogram, HistogramOpts, IntCounter, Registry, TextEncoder};
+use prometheus::{Encoder, Histogram, HistogramOpts, IntCounter, Registry, TextEncoder, opts};
 
 /// Shared metrics handle for the service.
 pub struct ServiceMetrics {

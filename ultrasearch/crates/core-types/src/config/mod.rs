@@ -424,14 +424,16 @@ mod tests {
         cfg.app.data_dir = "X:/UltraSearch".into();
         apply_placeholders(&mut cfg);
         assert_eq!(cfg.logging.file, "X:/UltraSearch/log/searchd.log");
-        assert!(cfg
-            .paths
-            .meta_index
-            .starts_with("X:/UltraSearch/index/meta"));
-        assert!(cfg
-            .semantic
-            .index_dir
-            .starts_with("X:/UltraSearch/index/semantic"));
+        assert!(
+            cfg.paths
+                .meta_index
+                .starts_with("X:/UltraSearch/index/meta")
+        );
+        assert!(
+            cfg.semantic
+                .index_dir
+                .starts_with("X:/UltraSearch/index/semantic")
+        );
     }
 
     #[test]

@@ -8,9 +8,7 @@ use std::path::Path;
 use anyhow::Result;
 use core_types::DocKey;
 use tantivy::{
-    schema::document::TantivyDocument,
-    schema::*,
-    Index, IndexSettings, IndexWriter, ReloadPolicy,
+    schema::document::TantivyDocument, schema::*, Index, IndexSettings, IndexWriter, ReloadPolicy,
 };
 
 /// Field handles for the content index schema.
@@ -63,11 +61,10 @@ pub struct ContentIndex {
 
 pub fn open_or_create(path: &Path) -> Result<ContentIndex> {
     let (schema, fields) = build_schema();
-    let settings = IndexSettings::default();
     let index = if path.join("meta.json").exists() {
         Index::open_in_dir(path)?
     } else {
-        Index::create_in_dir(path, schema, settings)?
+        Index::create_in_dir(path, schema, IndexSettings::default())?
     };
     Ok(ContentIndex { index, fields })
 }
@@ -149,7 +146,7 @@ pub fn to_document(doc: &ContentDoc, fields: &ContentFields) -> TantivyDocument 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tantivy::schema::Value;
+    use tantivy::schema::OwnedValue;
 
     #[test]
     fn schema_has_expected_fields() {
@@ -184,12 +181,14 @@ mod tests {
             content: "hello world".into(),
         };
         let tantivy_doc = to_document(&doc, &fields);
-        let vals: Vec<_> = tantivy_doc.get_all(fields.doc_key).cloned().collect();
-        assert_eq!(vals.len(), 1);
-        match &vals[0] {
-            Value::U64(v) => assert_eq!(*v, doc.key.0),
+        let mut vals = tantivy_doc.get_all(fields.doc_key);
+        let first = vals.next().expect("doc_key set");
+        let owned: OwnedValue = first.into();
+        match owned {
+            OwnedValue::U64(v) => assert_eq!(v, doc.key.0),
             other => panic!("unexpected value {:?}", other),
         }
+        assert!(vals.next().is_none());
     }
 
     #[test]

@@ -1,5 +1,5 @@
 //! Simple length-prefixed framing helpers for pipe/stream transport.
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 pub const MAX_FRAME: usize = 256 * 1024;
 

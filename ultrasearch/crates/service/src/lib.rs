@@ -2,11 +2,11 @@
 
 mod logging;
 pub mod metrics;
-pub mod status;
 pub mod priority;
+pub mod status;
 
 pub use logging::init as init_tracing;
 pub use metrics::{
-    init_metrics_from_config, scrape_metrics, ServiceMetrics, ServiceMetricsSnapshot,
+    ServiceMetrics, ServiceMetricsSnapshot, init_metrics_from_config, scrape_metrics,
 };
-pub use priority::{set_process_priority, ProcessPriority};
+pub use priority::{ProcessPriority, set_process_priority};

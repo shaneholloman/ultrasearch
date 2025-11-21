@@ -62,7 +62,7 @@ impl FromStr for DocKey {
 }
 
 bitflags::bitflags! {
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
     pub struct FileFlags: u32 {
         const IS_DIR   = 0b0000_0001;
         const HIDDEN   = 0b0000_0010;

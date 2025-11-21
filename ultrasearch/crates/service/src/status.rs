@@ -34,13 +34,7 @@ mod tests {
 
     #[test]
     fn populates_defaults() {
-        let resp = make_status_response(
-            Uuid::nil(),
-            vec![],
-            "idle".into(),
-            None,
-            None,
-        );
+        let resp = make_status_response(Uuid::nil(), vec![], "idle".into(), None, None);
         assert!(resp.last_index_commit_ts.is_some());
     }
 }

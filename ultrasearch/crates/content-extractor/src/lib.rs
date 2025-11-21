@@ -133,8 +133,7 @@ impl Extractor for SimpleTextExtractor {
             });
         }
 
-        let text_raw =
-            fs::read_to_string(path).map_err(|e| ExtractError::Failed(e.to_string()))?;
+        let text_raw = fs::read_to_string(path).map_err(|e| ExtractError::Failed(e.to_string()))?;
         let (text, truncated) = enforce_limits_str(&text_raw, ctx);
 
         Ok(ExtractedContent {

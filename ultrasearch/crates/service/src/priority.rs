@@ -12,8 +12,8 @@ pub fn set_process_priority(priority: ProcessPriority) {
     #[cfg(target_os = "windows")]
     {
         use windows::Win32::System::Threading::{
-            GetCurrentProcess, SetPriorityClass, BELOW_NORMAL_PRIORITY_CLASS,
-            IDLE_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS,
+            BELOW_NORMAL_PRIORITY_CLASS, GetCurrentProcess, IDLE_PRIORITY_CLASS,
+            NORMAL_PRIORITY_CLASS, SetPriorityClass,
         };
 
         let class = match priority {
