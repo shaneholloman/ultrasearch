@@ -12,6 +12,7 @@
 use core_types::DocKey;
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
+#[cfg(target_os = "windows")]
 use tracing::warn;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,10 +81,6 @@ impl SystemLoadSampler {
         self.sys.refresh_memory();
 
         let now = Instant::now();
-        let dt = now
-            .saturating_duration_since(self.last_sample)
-            .max(Duration::from_millis(1));
-        let secs = dt.as_secs_f64();
 
         let cpu_percent = self.sys.global_cpu_info().cpu_usage();
         let total = self.sys.total_memory().max(1);

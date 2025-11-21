@@ -9,9 +9,10 @@ use std::path::Path;
 
 use anyhow::Result;
 use core_types::DocKey;
-use tantivy::{
-    Index, IndexWriter, ReloadPolicy, schema::document::TantivyDocument, schema::*,
-};
+use tantivy::{schema::document::TantivyDocument, schema::*, Index, IndexWriter};
+
+#[cfg(test)]
+use tantivy::{IndexSettings, ReloadPolicy};
 
 /// Fields used in the metadata index.
 #[derive(Debug, Clone)]
@@ -167,7 +168,7 @@ mod tests {
     fn add_and_read_round_trip() -> Result<()> {
         let dir = RamDirectory::create();
         let (schema, fields) = build_schema();
-        let index = Index::create(dir, schema)?;
+        let index = Index::create(dir, schema, IndexSettings::default())?;
         let mut writer = index.writer_with_num_threads(1, 50_000_000)?;
 
         let docs = vec![

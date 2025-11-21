@@ -11,3 +11,7 @@ core-types = { path = "../core-types" }
 anyhow = { workspace = true }
 extractous = { workspace = true }
 tracing = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = "*"

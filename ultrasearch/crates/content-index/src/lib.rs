@@ -64,7 +64,7 @@ pub fn open_or_create(path: &Path) -> Result<ContentIndex> {
     let index = if path.join("meta.json").exists() {
         Index::open_in_dir(path)?
     } else {
-        Index::create_in_dir(path, schema, IndexSettings::default())?
+        Index::create_in_dir(path, schema)?
     };
     Ok(ContentIndex { index, fields })
 }

@@ -4,6 +4,7 @@ At a high level you’re building:
 - 2025-11-20 (PinkPond): Started bead ultrasearch-c00.1.1 – pin toolchain/config; added rust-toolchain.toml and .cargo/config.toml per best-practices. No code changes yet.
 - 2025-11-20 to 2025-11-21 (LilacCat): c00.3 scaffolding in ntfs-watcher/meta-index (types, schema, helpers, tests); c00.5 scaffolding in content-extractor (extractor stack, limits, tests); config doc additions for extraction/scheduler; core-types config defaults/tests; misc small tests. Workspace fix still pending manifest window.
 - 2025-11-21 (LilacCat): Nightly + wildcard policy noted; plan to run c00.1.2 as soon as manifests free to fix workspace members, remove optional hnsw_rs from workspace deps, and align editions/toolchain to the new mandate.
+- 2025-11-21 (PinkSnow): Updated policy docs to nightly + latest crates; assigned epics across agents; working c00.1.2 (workspace manifests/windows-sys/usn-journal-rs) under nightly; reached out via Agent Mail.
 
 * an **NTFS + USN–driven catalog** for filenames and metadata (Everything‑style),
 * a **Tantivy‑based full‑text engine** for contents,

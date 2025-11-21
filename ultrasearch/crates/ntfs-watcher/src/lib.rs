@@ -12,7 +12,7 @@ use thiserror::Error;
 pub type Usn = u64;
 
 /// Static information about a mounted NTFS volume.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VolumeInfo {
     /// Small runtime identifier assigned by the service.
     pub id: VolumeId,
@@ -23,7 +23,7 @@ pub struct VolumeInfo {
 }
 
 /// Lightweight metadata for a single file or directory.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileMeta {
     pub doc_key: DocKey,
     pub name: String,
@@ -32,7 +32,7 @@ pub struct FileMeta {
 }
 
 /// Stream of logical file-system events derived from the USN journal.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileEvent {
     Created(FileMeta),
     Deleted(DocKey),

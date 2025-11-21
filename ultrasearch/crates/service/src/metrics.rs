@@ -57,8 +57,13 @@ impl ServiceMetrics {
 
     /// Record a worker failure; returns true if the threshold has been met/exceeded.
     pub fn record_worker_failure(&self) -> bool {
-        let failures = self.worker_failures.inc();
-        failures >= self.worker_failure_threshold
+        self.worker_failures.inc();
+        self.worker_failures.get() >= self.worker_failure_threshold
+    }
+
+    /// Reset the worker failure counter (used after a healthy run).
+    pub fn reset_worker_failures(&self) {
+        self.worker_failures.reset();
     }
 
     pub fn snapshot_with_queue_state(

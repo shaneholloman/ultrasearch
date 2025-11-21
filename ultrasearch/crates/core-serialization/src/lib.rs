@@ -67,7 +67,7 @@ where
 pub fn from_rkyv_bytes<T>(bytes: &[u8]) -> Result<T>
 where
     T: Archive,
-    T::Archived: CheckBytes<rkyv::validation::validators::DefaultValidator<'static>>
+    for<'a> T::Archived: CheckBytes<rkyv::validation::validators::DefaultValidator<'a>>
         + RDeserialize<T, rkyv::Infallible>,
 {
     let archived =
