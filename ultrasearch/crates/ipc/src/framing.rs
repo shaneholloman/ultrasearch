@@ -60,6 +60,24 @@ mod tests {
     }
 
     #[test]
+    fn zero_length_payload_roundtrips() {
+        let payload: &[u8] = &[];
+        let framed = encode_frame(payload).unwrap();
+        let (out, rem) = decode_frame(&framed).unwrap();
+        assert!(out.is_empty());
+        assert!(rem.is_empty());
+    }
+
+    #[test]
+    fn max_frame_boundary_is_allowed() {
+        let payload = vec![0u8; MAX_FRAME];
+        let framed = encode_frame(&payload).unwrap();
+        let (out, rem) = decode_frame(&framed).unwrap();
+        assert_eq!(out.len(), MAX_FRAME);
+        assert!(rem.is_empty());
+    }
+
+    #[test]
     fn decode_rejects_header_over_max_frame() {
         // crafted header claims a payload bigger than MAX_FRAME
         let mut buf = Vec::new();

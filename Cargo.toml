@@ -1,33 +1,20 @@
-cargo-features = ["edition2024"]
-
 [workspace]
-members = [
-    "ultrasearch/crates/core-types",
-    "ultrasearch/crates/core-serialization",
-    "ultrasearch/crates/ntfs-watcher",
-    "ultrasearch/crates/meta-index",
-    "ultrasearch/crates/content-index",
-    "ultrasearch/crates/content-extractor",
-    "ultrasearch/crates/scheduler",
-    "ultrasearch/crates/ipc",
-    "ultrasearch/crates/semantic-index",
-    "ultrasearch/crates/service",
-    "ultrasearch/crates/index-worker",
-    "ultrasearch/crates/ui",
-    "ultrasearch/crates/cli",
-]
 resolver = "2"
+members = [
+    "ultrasearch/crates/*",
+]
 
 [workspace.package]
-edition = "2024"
+edition = "2021"
 rust-version = "1.84"
+version = "0.1.0"
 license = "MIT OR Apache-2.0"
-authors = ["Jeffrey Emanuel <jeffrey.emanuel@gmail.com>"]
+authors = ["Ultrasearch Team"]
 repository = "https://github.com/Dicklesworthstone/ultrasearch"
 homepage = "https://github.com/Dicklesworthstone/ultrasearch"
 
 [workspace.dependencies]
-# --- Core ecosystem ---
+# Keep deps centralized; values are wildcards per policy.
 anyhow = "*"
 thiserror = "*"
 serde = { version = "*", features = ["derive"] }
@@ -36,15 +23,13 @@ serde_yaml = "*"
 toml = "*"
 bincode = "*"
 rkyv = { version = "*", features = ["std", "validation"] }
-
-# --- Concurrency & async ---
+dotenvy = "*"
+once_cell = "*"
 tokio = { version = "*", features = ["rt-multi-thread", "macros", "net", "fs", "io-util", "time", "signal"] }
 rayon = "*"
 crossbeam-channel = "*"
 parking_lot = "*"
-
-# --- NTFS / Windows / system info ---
-windows = { version = "*", features = [
+windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_System_SystemInformation",
     "Win32_System_Console",
@@ -56,60 +41,28 @@ windows = { version = "*", features = [
     "Win32_Storage_FileSystem",
     "Win32_System_Com",
     "Win32_UI_WindowsAndMessaging",
-    "Win32_System_ServiceManagement",
 ] }
-windows-sys = { version = "*", features = [
-    "Win32_Foundation",
-    "Win32_System_SystemInformation",
-    "Win32_System_Threading",
-    "Win32_Storage_FileSystem",
-    "Win32_System_ServiceManagement",
-] }
-sysinfo = { version = "*", default-features = false, features = ["system", "process", "disk"] }
-
-# You’ll likely vendor / fork a USN journal crate; placeholder here:
-usn-journal-rs = { git = "https://github.com/example/usn-journal-rs.git", branch = "main" }
-
-# --- Search engine / index ---
+sysinfo = { version = "0.30", default-features = false, features = ["system", "process"] }
 tantivy = { version = "*", features = ["mmap", "lz4-compression"] }
 fst = "*"
 memmap2 = "*"
-
-# --- Content extraction / OCR / HTTP ---
-extractous = { git = "https://github.com/extractous/extractous.git", branch = "main" }
+extractous = { version = "*" }
 reqwest = { version = "*", default-features = false, features = ["rustls-tls", "stream"] }
-# Optional OCR & image handling – enable in content-extractor crate
 image = { version = "*", default-features = false, features = ["png", "jpeg"] }
-
-# --- IPC / serialization ---
 uuid = { version = "*", features = ["v4"] }
-
-# --- Logging / tracing ---
 tracing = "*"
 tracing-subscriber = { version = "*", features = ["env-filter", "fmt"] }
-
-# --- Data structures / utilities ---
 smallvec = "*"
 ahash = "*"
 indexmap = { version = "*", features = ["serde"] }
 lru = "*"
 slotmap = "*"
 bumpalo = "*"
-
-# --- CLI / UX for tools ---
 clap = { version = "*", features = ["derive", "env"] }
 console = "*"
 indicatif = "*"
-
-# --- UI stack (Zed’s GPUI) ---
 gpui = { git = "https://github.com/zed-industries/zed.git", package = "gpui" }
 gpui-component = { git = "https://github.com/zed-industries/zed.git", package = "gpui-component" }
-
-# --- Optional vector / semantic index ---
-# You can swap this for another ANN crate or your own HNSW implementation.
-# Placeholder dependency; wire it only in semantic-index crate.
-
-# --- Testing / dev ---
 proptest = "*"
 criterion = { version = "*", default-features = false, features = ["html_reports"] }
 
@@ -145,8 +98,3 @@ opt-level = "z"
 [profile.release-worker]
 inherits = "release"
 opt-level = 3
-
-[patch.crates-io]
-# If you end up forking anything (e.g. a USN crate or Tantivy), add patches here.
-# tantivy = { git = "https://github.com/yourfork/tantivy.git", rev = "..." }
-# usn-journal-rs = { git = "https://github.com/yourfork/usn-journal-rs.git", rev = "..." }
