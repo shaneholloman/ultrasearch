@@ -130,6 +130,12 @@ pub enum Job {
     Rename { from: DocKey, to: DocKey },
 }
 
+#[derive(Debug)]
+pub struct QueuedJob {
+    pub job: Job,
+    pub est_bytes: u64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobCategory {
     Critical, // deletes/renames/attr updates
@@ -154,17 +160,18 @@ impl Budget {
 
 #[derive(Default)]
 pub struct JobQueues {
-    critical: VecDeque<Job>,
-    metadata: VecDeque<Job>,
-    content: VecDeque<Job>,
+    critical: VecDeque<QueuedJob>,
+    metadata: VecDeque<QueuedJob>,
+    content: VecDeque<QueuedJob>,
 }
 
 impl JobQueues {
-    pub fn push(&mut self, category: JobCategory, job: Job) {
+    pub fn push(&mut self, category: JobCategory, job: Job, est_bytes: u64) {
+        let item = QueuedJob { job, est_bytes };
         match category {
-            JobCategory::Critical => self.critical.push_back(job),
-            JobCategory::Metadata => self.metadata.push_back(job),
-            JobCategory::Content => self.content.push_back(job),
+            JobCategory::Critical => self.critical.push_back(item),
+            JobCategory::Metadata => self.metadata.push_back(item),
+            JobCategory::Content => self.content.push_back(item),
         }
     }
 
@@ -184,18 +191,28 @@ pub fn select_jobs(
     load: SystemLoad,
     budget: Budget,
 ) -> Vec<Job> {
+    if budget.max_files == 0 || budget.max_bytes == 0 {
+        return Vec::new();
+    }
+
     let mut selected = Vec::new();
     let mut file_count = 0usize;
     let mut bytes_accum = 0u64;
 
-    let mut take = |queue: &mut VecDeque<Job>, limit: usize| {
+    let mut take = |queue: &mut VecDeque<QueuedJob>, limit: usize| {
         for _ in 0..limit {
             if file_count >= budget.max_files {
                 break;
             }
-            if let Some(job) = queue.pop_front() {
-                selected.push(job);
+            if let Some(qj) = queue.pop_front() {
+                if bytes_accum + qj.est_bytes > budget.max_bytes {
+                    // stop taking from this queue to respect byte budget
+                    queue.push_front(qj);
+                    break;
+                }
+                selected.push(qj.job);
                 file_count += 1;
+                bytes_accum += qj.est_bytes;
             } else {
                 break;
             }
@@ -250,4 +267,70 @@ fn idle_elapsed_ms() -> Option<u64> {
 fn idle_elapsed_ms() -> Option<u64> {
     // Non-Windows placeholder; treat as always active for now.
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn budgets_respected_files_and_bytes() {
+        let mut queues = JobQueues::default();
+        queues.push(
+            JobCategory::Content,
+            Job::ContentIndex(DocKey::from_parts(1, 1)),
+            5,
+        );
+        queues.push(
+            JobCategory::Content,
+            Job::ContentIndex(DocKey::from_parts(1, 2)),
+            5,
+        );
+
+        let selected = select_jobs(
+            &mut queues,
+            IdleState::DeepIdle,
+            SystemLoad {
+                cpu_percent: 10.0,
+                mem_used_percent: 10.0,
+                disk_busy: false,
+            },
+            Budget {
+                max_files: 1,
+                max_bytes: 8,
+            },
+        );
+        assert_eq!(selected.len(), 1);
+        assert_eq!(queues.len(), 1); // second job remains due to budget
+    }
+
+    #[test]
+    fn critical_jobs_run_even_when_busy() {
+        let mut queues = JobQueues::default();
+        queues.push(
+            JobCategory::Critical,
+            Job::Delete(DocKey::from_parts(1, 9)),
+            1,
+        );
+        queues.push(
+            JobCategory::Content,
+            Job::ContentIndex(DocKey::from_parts(1, 2)),
+            50,
+        );
+
+        let selected = select_jobs(
+            &mut queues,
+            IdleState::Active,
+            SystemLoad {
+                cpu_percent: 95.0,
+                mem_used_percent: 90.0,
+                disk_busy: true,
+            },
+            Budget {
+                max_files: 10,
+                max_bytes: 1_000,
+            },
+        );
+        assert!(selected.iter().any(|j| matches!(j, Job::Delete(_))));
+    }
 }

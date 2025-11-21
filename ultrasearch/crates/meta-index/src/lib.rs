@@ -214,23 +214,3 @@ mod tests {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tantivy::directory::RamDirectory;
-
-    #[test]
-    fn schema_builds_and_fields_present() {
-        let (schema, fields) = build_schema();
-        assert!(schema.get_field_entry(fields.doc_key).is_stored());
-        assert!(schema.get_field_entry(fields.name).is_text());
-    }
-
-    #[test]
-    fn create_index_in_ram() {
-        let (schema, _fields) = build_schema();
-        let dir = RamDirectory::create();
-        let _index = Index::create(dir, schema).expect("index should create in ram");
-    }
-}
