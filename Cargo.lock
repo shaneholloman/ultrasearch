@@ -2574,6 +2574,7 @@ dependencies = [
  "once_cell",
  "prometheus",
  "scheduler",
+ "tantivy",
  "tokio",
  "tracing",
  "tracing-appender",

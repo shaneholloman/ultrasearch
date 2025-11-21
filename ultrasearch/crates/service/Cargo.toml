@@ -24,6 +24,7 @@ ntfs-watcher = { path = "../ntfs-watcher" }
 prometheus = "0.13"
 uuid = { workspace = true }
 bincode = { workspace = true }
+tantivy = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true }

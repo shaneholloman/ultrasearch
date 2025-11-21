@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use console::style;
+use core_types::config::load_or_create_config;
 use ipc::framing;
 use ipc::{QueryExpr, SearchMode, SearchRequest, SearchResponse, TermExpr, TermModifier};
 use ipc::{StatusRequest, StatusResponse};
@@ -58,6 +59,9 @@ enum ModeArg {
 }
 
 fn main() -> Result<()> {
+    // Load config/env
+    let _cfg = load_or_create_config(None)?;
+
     let cli = Cli::parse();
     match cli.command {
         Commands::Search {
