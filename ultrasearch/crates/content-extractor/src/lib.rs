@@ -402,13 +402,13 @@ mod tests {
         };
         let simple = SimpleTextExtractor;
         let err = simple.extract(&ctx, DocKey::from_parts(1, 1)).unwrap_err();
-        match err {
-            ExtractError::FileTooLarge { bytes, max_bytes } => {
-                assert_eq!(bytes, 10);
-                assert_eq!(max_bytes, 5);
+        assert!(matches!(
+            err,
+            ExtractError::FileTooLarge {
+                bytes: 10,
+                max_bytes: 5
             }
-            other => panic!("unexpected error: {other:?}"),
-        }
+        ));
     }
 
     #[test]
@@ -478,12 +478,12 @@ mod tests {
         let err = extractor
             .extract(&ctx, DocKey::from_parts(9, 9))
             .unwrap_err();
-        match err {
-            ExtractError::FileTooLarge { bytes, max_bytes } => {
-                assert_eq!(bytes, 128);
-                assert_eq!(max_bytes, 64);
+        assert!(matches!(
+            err,
+            ExtractError::FileTooLarge {
+                bytes: 128,
+                max_bytes: 64
             }
-            other => panic!("unexpected error: {other:?}"),
-        }
+        ));
     }
 }
