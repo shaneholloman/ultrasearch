@@ -4,9 +4,9 @@ use crate::{ExtractContext, ExtractError, ExtractedContent, Extractor, enforce_l
 use anyhow::Result;
 use core_types::DocKey;
 use std::path::Path;
+use windows::Win32::Storage::IndexServer::{FILTER_TEXT, IFilter, LoadIFilter};
 use windows::Win32::System::Com::{CoInitialize, CoUninitialize, IPersistFile};
-use windows::Win32::Storage::IndexServer::{IFilter, LoadIFilter, FILTER_TEXT};
-use windows::core::{PCWSTR, HSTRING};
+use windows::core::{HSTRING, PCWSTR};
 
 // TODO: Properly manage COM initialization. CoInitialize is thread-local.
 // A robust solution might use a dedicated STA thread pool for IFilters.
@@ -42,17 +42,19 @@ impl Extractor for IFilterExtractor {
             // Attempt init; ignore error (e.g. already init)
             let _ = CoInitialize(None);
             // Defer uninit? In a thread pool, we might init once per thread.
-            // Here we are likely in a rayon thread. 
+            // Here we are likely in a rayon thread.
             // Ideally we should use a scope guard or just assume the thread is initialized by the runtime wrapper.
             // But rayon threads are generic.
             // Let's defer uninit for correctness in this scope.
             // Actually, excessive init/uninit is slow.
-            
+
             // Scope guard for CoUninitialize
             struct CoGuard;
             impl Drop for CoGuard {
                 fn drop(&mut self) {
-                    unsafe { CoUninitialize(); }
+                    unsafe {
+                        CoUninitialize();
+                    }
                 }
             }
             let _guard = CoGuard;
@@ -65,29 +67,29 @@ impl Extractor for IFilterExtractor {
             // Let's check docs or generated code signature.
             // windows 0.52 function signature:
             // pub unsafe fn LoadIFilter<P0>(pwcspath: P0, punknownouter: Option<IUnknown>, pvreserved: *mut c_void) -> Result<IFilter>
-            
+
             let filter_res = LoadIFilter(PCWSTR(path_hstring.as_ptr()), None, std::ptr::null_mut());
-            
+
             match filter_res {
                 Ok(f) => filter = Some(f),
                 Err(e) => return Err(ExtractError::Failed(format!("LoadIFilter failed: {e}"))),
             }
-            
+
             let filter = filter.unwrap();
-            
+
             // Extract text chunks
             let mut text = String::new();
             let mut truncated = false;
             let mut bytes_processed = 0;
-            
+
             // Stat chunk
             // STAT_CHUNK struct.
             // IFilter::GetChunk(&mut stat)
-            
+
             // Loop chunks
             // Reading text: IFilter::GetText(&mut buffer)
             // We need a buffer.
-            
+
             loop {
                 let mut stat = windows::Win32::Storage::IndexServer::STAT_CHUNK::default();
                 if let Err(e) = filter.GetChunk(&mut stat) {
@@ -95,13 +97,14 @@ impl Extractor for IFilterExtractor {
                     // "FILTER_E_END_OF_CHUNKS" (0x80041700)
                     // windows crate maps HRESULTs.
                     // We check specific error code.
-                    if e.code().0 == -2147215616 { // FILTER_E_END_OF_CHUNKS
+                    if e.code().0 == -2147215616 {
+                        // FILTER_E_END_OF_CHUNKS
                         break;
                     }
                     // Other error
                     return Err(ExtractError::Failed(format!("GetChunk failed: {e}")));
                 }
-                
+
                 if stat.flags & windows::Win32::Storage::IndexServer::CHUNK_TEXT != 0 {
                     // Read text
                     loop {
@@ -109,13 +112,13 @@ impl Extractor for IFilterExtractor {
                         // GetText(buf_len, buf_ptr) -> Result<()>
                         // Returns chunks.
                         // In 0.52 it might take slice.
-                        
+
                         // Signature: unsafe fn GetText(&self, pcwcbuffer: *mut u32, awcbuffer: *mut u16) -> Result<()>
                         // pcwcbuffer is in/out.
-                        
+
                         let mut count = buf.len() as u32;
                         let res = filter.GetText(&mut count, buf.as_mut_ptr());
-                        
+
                         match res {
                             Ok(_) => {
                                 if count == 0 {
@@ -136,17 +139,17 @@ impl Extractor for IFilterExtractor {
                                     break;
                                 }
                                 // warning log?
-                                break; 
+                                break;
                             }
                         }
                     }
                 }
-                
+
                 if truncated {
                     break;
                 }
             }
-            
+
             Ok(ExtractedContent {
                 key,
                 text,

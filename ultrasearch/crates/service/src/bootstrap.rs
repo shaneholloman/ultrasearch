@@ -1,15 +1,13 @@
 use std::{
     path::Path,
     sync::Arc,
-    thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
 use core_types::config::AppConfig;
 use ipc::VolumeStatus;
 use ntfs_watcher::{NtfsError, discover_volumes, enumerate_mft};
-use scheduler::SchedulerConfig;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -64,10 +62,14 @@ pub fn run_app(cfg: &AppConfig, mut shutdown_rx: mpsc::Receiver<()>) -> Result<(
                 // Check if error string contains "corruption" or "corrupted" or similar tantivy errors.
                 // Tantivy errors are opaque via anyhow, so string check is a heuristic.
                 let msg = e.to_string().to_lowercase();
-                let is_corruption = msg.contains("corrupt") || msg.contains("format") || msg.contains("lock"); 
-                
+                let is_corruption =
+                    msg.contains("corrupt") || msg.contains("format") || msg.contains("lock");
+
                 if is_corruption && attempts < 1 {
-                    tracing::warn!("Index corruption detected ({}), attempting recovery...", msg);
+                    tracing::warn!(
+                        "Index corruption detected ({}), attempting recovery...",
+                        msg
+                    );
                     // Rename broken index if it exists
                     if meta_path.exists() {
                         let broken = meta_path.with_extension("broken");
@@ -83,7 +85,7 @@ pub fn run_app(cfg: &AppConfig, mut shutdown_rx: mpsc::Receiver<()>) -> Result<(
                     attempts += 1;
                     continue;
                 }
-                
+
                 tracing::warn!("unified search handler not initialized: {}", e);
                 break;
             }

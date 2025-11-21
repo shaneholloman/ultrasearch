@@ -479,7 +479,9 @@ fn expand_env_vars(input: &str) -> String {
     // but we want to minimize deps.
     if result.contains('$') {
         for (key, value) in std::env::vars() {
-            let token = format!("${}", key);
+            let mut token = String::with_capacity(key.len() + 1);
+            token.push('$');
+            token.push_str(&key);
             if result.contains(&token) {
                 result = result.replace(&token, &value);
             }
@@ -489,7 +491,10 @@ fn expand_env_vars(input: &str) -> String {
     // 2. Windows-style %VAR%
     if cfg!(windows) && result.contains('%') {
         for (key, value) in std::env::vars() {
-            let token = format!("%{}%", key);
+            let mut token = String::with_capacity(key.len() + 2);
+            token.push('%');
+            token.push_str(&key);
+            token.push('%');
             if result.contains(&token) {
                 result = result.replace(&token, &value);
             }

@@ -35,7 +35,7 @@ impl JobDispatcher {
         // For dev, we might use "cargo run" wrapper or explicit path.
         // In release, it's "search-index-worker".
         // We'll look for it in the current exe dir.
-        
+
         let mut worker_path = std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|d| d.join("search-index-worker")))
@@ -73,7 +73,11 @@ impl JobDispatcher {
         let json = serde_json::to_string_pretty(&batch)?;
         tokio::fs::write(&job_file_path, json).await?;
 
-        info!("Spawning worker for batch {} ({} jobs)", batch_id, jobs.len());
+        info!(
+            "Spawning worker for batch {} ({} jobs)",
+            batch_id,
+            jobs.len()
+        );
 
         let status = Command::new(&self.worker_path)
             .arg("--job-file")

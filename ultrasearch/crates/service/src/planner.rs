@@ -1,4 +1,4 @@
-use ipc::{QueryExpr, RangeExpr, RangeOp, RangeValue, TermExpr, TermModifier};
+use ipc::QueryExpr;
 
 /// Optimizes a raw query AST for execution.
 pub struct QueryPlanner;
@@ -92,7 +92,7 @@ impl QueryPlanner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ipc::{FieldKind, TermExpr, TermModifier};
+    use ipc::{TermExpr, TermModifier};
 
     fn term(val: &str) -> QueryExpr {
         QueryExpr::Term(TermExpr {
@@ -110,10 +110,10 @@ mod tests {
             term("D"),
         ]);
         let optimized = QueryPlanner::optimize(q);
+        assert!(matches!(&optimized, QueryExpr::And(_)), "expected And");
+
         if let QueryExpr::And(subs) = optimized {
             assert_eq!(subs.len(), 4);
-        } else {
-            panic!("expected And");
         }
     }
 
@@ -122,12 +122,12 @@ mod tests {
         // Not(A or B) -> Not(A) and Not(B)
         let q = QueryExpr::Not(Box::new(QueryExpr::Or(vec![term("A"), term("B")])));
         let optimized = QueryPlanner::optimize(q);
+        assert!(matches!(&optimized, QueryExpr::And(_)), "expected And");
+
         if let QueryExpr::And(subs) = optimized {
             assert_eq!(subs.len(), 2);
             assert!(matches!(subs[0], QueryExpr::Not(_)));
             assert!(matches!(subs[1], QueryExpr::Not(_)));
-        } else {
-            panic!("expected And");
         }
     }
 }

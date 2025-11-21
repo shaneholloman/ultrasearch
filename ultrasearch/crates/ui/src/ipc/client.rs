@@ -1,7 +1,7 @@
 use anyhow::Result;
 use ipc::{SearchRequest, SearchResponse, StatusRequest, StatusResponse};
+#[cfg(windows)]
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 #[cfg(windows)]
 use ipc::client::PipeClient;

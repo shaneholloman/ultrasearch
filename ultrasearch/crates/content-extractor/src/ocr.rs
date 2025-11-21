@@ -36,7 +36,7 @@ impl OcrExtractor {
         if let Some(path) = self.manager.get_executable_path(&self.tesseract_component) {
             return Some(path);
         }
-        
+
         // Fallback to system path
         // This simple check assumes 'tesseract' is in PATH
         if which::which("tesseract").is_ok() {
@@ -65,11 +65,12 @@ impl Extractor for OcrExtractor {
     }
 
     fn extract(&self, ctx: &ExtractContext, key: DocKey) -> Result<ExtractedContent, ExtractError> {
-        let tesseract_bin = self.get_tesseract_path()
+        let tesseract_bin = self
+            .get_tesseract_path()
             .ok_or_else(|| ExtractError::Failed("tesseract binary not found".into()))?;
 
         let input_path = Path::new(ctx.path);
-        
+
         // Run tesseract: tesseract <image> stdout
         let output = Command::new(tesseract_bin)
             .arg(input_path)

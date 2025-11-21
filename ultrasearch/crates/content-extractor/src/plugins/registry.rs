@@ -52,7 +52,7 @@ impl PluginRegistry {
         map.insert(plugin.meta().id.clone(), plugin);
     }
 
-    pub fn get(&self, id: &str) -> Option<Arc<Box<dyn ExtractorPlugin>>> {
+    pub fn get(&self, _id: &str) -> Option<Arc<Box<dyn ExtractorPlugin>>> {
         // This is tricky with Box<dyn>. We can't easily clone a Box<dyn Trait> unless we enforce Clone.
         // Or we store them in Arc.
         // Let's change storage to Arc<Box<dyn>> or just Arc<dyn>.

@@ -11,7 +11,7 @@ use std::time::Instant;
 use tantivy::collector::{Count, TopDocs};
 use tantivy::query::{BooleanQuery, Occur, Query, QueryParser, TermQuery};
 use tantivy::schema::{Document, IndexRecordOption, TantivyDocument, Value};
-use tantivy::{DocAddress, IndexReader, Score, Term};
+use tantivy::{IndexReader, Score, Term};
 use tracing::warn;
 
 /// Trait for handling search requests.

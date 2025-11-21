@@ -1,7 +1,7 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -38,11 +38,7 @@ impl ComponentManager {
         let path = self
             .component_path(component)
             .join(&component.executable_name);
-        if path.exists() {
-            Some(path)
-        } else {
-            None
-        }
+        if path.exists() { Some(path) } else { None }
     }
 
     pub fn is_installed(&self, component: &Component) -> bool {
@@ -60,7 +56,11 @@ impl ComponentManager {
         }
         fs::create_dir_all(&install_dir)?;
 
-        tracing::info!("Downloading component {} from {}", component.id, component.url);
+        tracing::info!(
+            "Downloading component {} from {}",
+            component.id,
+            component.url
+        );
 
         let response = reqwest::get(&component.url).await?;
         if !response.status().is_success() {
@@ -68,14 +68,19 @@ impl ComponentManager {
         }
 
         let content = response.bytes().await?;
-        
+
         // Verify SHA256
         let mut hasher = Sha256::new();
         hasher.update(&content);
         let hash = format!("{:x}", hasher.finalize());
-        
+
         if hash != component.sha256 {
-            anyhow::bail!("hash mismatch for {}: expected {}, got {}", component.id, component.sha256, hash);
+            anyhow::bail!(
+                "hash mismatch for {}: expected {}, got {}",
+                component.id,
+                component.sha256,
+                hash
+            );
         }
 
         // Extract or write
@@ -88,7 +93,7 @@ impl ComponentManager {
             let target = install_dir.join(&component.executable_name);
             let mut file = File::create(&target)?;
             file.write_all(&content)?;
-            
+
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;

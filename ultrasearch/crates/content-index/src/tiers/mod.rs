@@ -59,7 +59,7 @@ impl TieredIndex {
     }
 
     pub fn add_doc<D: Document>(&self, doc: D) -> Result<()> {
-        let mut w = self.hot_writer.lock().unwrap();
+        let mut w = self.hot_writer.lock().map_err(|_| anyhow::anyhow!("hot writer lock poisoned"))?;
         w.add_document(doc)?;
         w.commit()?; // Auto-commit for hot tier? Or caller controls?
         // For low latency, we commit frequently.

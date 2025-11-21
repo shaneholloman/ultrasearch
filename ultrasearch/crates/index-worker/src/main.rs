@@ -90,7 +90,9 @@ fn main() -> Result<()> {
     // Lower process priority to minimize impact
     #[cfg(target_os = "windows")]
     unsafe {
-        use windows::Win32::System::Threading::{GetCurrentProcess, SetPriorityClass, BELOW_NORMAL_PRIORITY_CLASS};
+        use windows::Win32::System::Threading::{
+            BELOW_NORMAL_PRIORITY_CLASS, GetCurrentProcess, SetPriorityClass,
+        };
         let _ = SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
     }
 
