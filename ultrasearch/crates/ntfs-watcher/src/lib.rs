@@ -74,6 +74,8 @@ pub enum NtfsError {
     Journal(String),
     #[error("mft enumeration failed: {0}")]
     Mft(String),
+    #[error("operation not supported on this platform")]
+    NotSupported,
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -95,12 +97,145 @@ pub trait NtfsWatcher {
 }
 
 /// Discover NTFS volumes available on the machine.
-///
-/// In the scaffold this returns an empty list; the concrete implementation will
-/// call Win32 APIs (GetLogicalDrives, GetVolumeInformationW, etc.).
+#[cfg(windows)]
 pub fn discover_volumes() -> Result<Vec<VolumeInfo>, NtfsError> {
-    // TODO: implement volume discovery via Win32 APIs (windows / windows-sys).
-    Ok(Vec::new())
+    use std::collections::HashMap;
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    use tracing::warn;
+    use windows::Win32::Storage::FileSystem::{
+        GetLogicalDrives, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
+    };
+    use windows::core::{PCWSTR, PWSTR};
+
+    let mut map: HashMap<String, Vec<char>> = HashMap::new();
+    let mask = unsafe { GetLogicalDrives() };
+    if mask == 0 {
+        return Err(NtfsError::Discovery("GetLogicalDrives returned 0".into()));
+    }
+
+    for i in 0..26 {
+        if mask & (1 << i) == 0 {
+            continue;
+        }
+        let letter = (b'A' + i as u8) as char;
+        let root = format!("{letter}:\\");
+        let mut root_wide: Vec<u16> = OsString::from(&root).encode_wide().collect();
+        root_wide.push(0);
+
+        let mut fs_name = [0u16; 32];
+        let mut serial = 0u32;
+        let mut max_comp = 0u32;
+        let mut flags = 0u32;
+        let ok = unsafe {
+            GetVolumeInformationW(
+                PCWSTR(root_wide.as_ptr()),
+                PWSTR::null(),
+                0,
+                Some(&mut serial),
+                Some(&mut max_comp),
+                Some(&mut flags),
+                PWSTR(fs_name.as_mut_ptr()),
+                fs_name.len() as u32,
+            )
+        };
+        if !ok.as_bool() {
+            warn!("GetVolumeInformationW failed for {root}");
+            continue;
+        }
+        let fs = String::from_utf16_lossy(&fs_name)
+            .trim_end_matches('\0')
+            .to_string();
+        if !fs.eq_ignore_ascii_case("ntfs") {
+            continue;
+        }
+
+        let mut guid_buf = [0u16; 64];
+        let ok = unsafe {
+            GetVolumeNameForVolumeMountPointW(
+                PCWSTR(root_wide.as_ptr()),
+                PWSTR(guid_buf.as_mut_ptr()),
+                guid_buf.len() as u32,
+            )
+        };
+        if !ok.as_bool() {
+            warn!("GetVolumeNameForVolumeMountPointW failed for {root}");
+            continue;
+        }
+        let guid = String::from_utf16_lossy(&guid_buf)
+            .trim_end_matches('\0')
+            .to_string();
+
+        map.entry(guid).or_default().push(letter);
+    }
+
+    let mut vols: Vec<VolumeInfo> = map
+        .into_iter()
+        .enumerate()
+        .map(|(idx, (guid_path, mut drive_letters))| {
+            drive_letters.sort_unstable();
+            VolumeInfo {
+                id: (idx + 1) as VolumeId,
+                guid_path,
+                drive_letters,
+            }
+        })
+        .collect();
+    vols.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(vols)
+}
+
+#[cfg(not(windows))]
+pub fn discover_volumes() -> Result<Vec<VolumeInfo>, NtfsError> {
+    Err(NtfsError::Discovery(
+        "volume discovery only implemented on Windows".into(),
+    ))
+}
+
+/// Open a volume handle with read access and permissive sharing (Windows only).
+#[cfg(windows)]
+pub fn open_volume_handle(
+    volume: &VolumeInfo,
+) -> Result<std::os::windows::io::OwnedHandle, NtfsError> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    use std::os::windows::io::{FromRawHandle, OwnedHandle, RawHandle};
+    use windows::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_GENERIC_READ, FILE_SHARE_DELETE,
+        FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    };
+    use windows::core::PCWSTR;
+
+    let mut path_w: Vec<u16> = OsString::from(&volume.guid_path).encode_wide().collect();
+    if !volume.guid_path.ends_with('\\') {
+        path_w.push('\\' as u16);
+    }
+    path_w.push(0);
+
+    let handle = unsafe {
+        CreateFileW(
+            PCWSTR(path_w.as_ptr()),
+            FILE_GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            None,
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS,
+            None,
+        )
+    };
+
+    if handle == INVALID_HANDLE_VALUE {
+        return Err(NtfsError::Discovery(format!(
+            "CreateFileW failed for {}",
+            volume.guid_path
+        )));
+    }
+
+    let raw: RawHandle = handle.0 as RawHandle;
+    // SAFETY: handle is valid (checked above) and ownership is transferred.
+    let owned = unsafe { OwnedHandle::from_raw_handle(raw) };
+    Ok(owned)
 }
 
 /// Enumerate the MFT for a given volume and emit file metadata snapshots.
@@ -108,8 +243,7 @@ pub fn discover_volumes() -> Result<Vec<VolumeInfo>, NtfsError> {
 /// A production implementation will stream records to avoid large memory
 /// spikes; here we surface the contract only.
 pub fn enumerate_mft(_volume: &VolumeInfo) -> Result<Vec<FileMeta>, NtfsError> {
-    // TODO: plumb usn-journal-rs MFT iterator and resolve parent/name into paths.
-    Ok(Vec::new())
+    Err(NtfsError::NotSupported)
 }
 
 /// Tail the USN journal for a volume and emit file events from the given cursor.
