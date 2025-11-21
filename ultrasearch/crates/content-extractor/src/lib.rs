@@ -55,6 +55,31 @@ pub struct ExtractorStack {
 }
 
 impl ExtractorStack {
+    /// Simple default stack: SimpleText followed by Noop.
+    pub fn with_defaults() -> Self {
+        Self::simple_only()
+    }
+
+    /// Simple-only stack (no external dependencies).
+    pub fn simple_only() -> Self {
+        Self::new(vec![Box::new(SimpleTextExtractor), Box::new(NoopExtractor)])
+    }
+
+    /// Build a stack optionally including Extractous when the feature is enabled.
+    pub fn with_extractous_enabled(enable: bool) -> Self {
+        if enable {
+            #[cfg(feature = "extractous-backend")]
+            {
+                return Self::new(vec![
+                    Box::new(SimpleTextExtractor),
+                    Box::new(ExtractousExtractor::new()),
+                    Box::new(NoopExtractor),
+                ]);
+            }
+        }
+        Self::simple_only()
+    }
+
     pub fn new(backends: Vec<Box<dyn Extractor + Send + Sync>>) -> Self {
         Self { backends }
     }
