@@ -1,0 +1,31 @@
+use tracing::warn;
+
+#[derive(Debug, Clone, Copy)]
+pub enum ProcessPriority {
+    Normal,
+    BelowNormal,
+    Idle,
+}
+
+/// Set process priority on Windows; no-op on other platforms for now.
+pub fn set_process_priority(priority: ProcessPriority) {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::System::Threading::{
+            GetCurrentProcess, SetPriorityClass, BELOW_NORMAL_PRIORITY_CLASS,
+            IDLE_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS,
+        };
+
+        let class = match priority {
+            ProcessPriority::Normal => NORMAL_PRIORITY_CLASS,
+            ProcessPriority::BelowNormal => BELOW_NORMAL_PRIORITY_CLASS,
+            ProcessPriority::Idle => IDLE_PRIORITY_CLASS,
+        };
+
+        unsafe {
+            if let Err(e) = SetPriorityClass(GetCurrentProcess(), class) {
+                warn!("Failed to set process priority: {e:?}");
+            }
+        }
+    }
+}
