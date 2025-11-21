@@ -251,6 +251,7 @@ pub struct StatusResponse {
     pub last_index_commit_ts: Option<i64>,
     pub scheduler_state: String,
     pub metrics: Option<MetricsSnapshot>,
+    pub served_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -284,10 +285,7 @@ mod tests {
         assert!(matches!(req.mode, SearchMode::Auto));
         assert_eq!(req.offset, 0);
         assert!(req.timeout.is_none());
-        match req.query {
-            QueryExpr::And(items) => assert!(items.is_empty()),
-            _ => panic!("default query should be And([])"),
-        }
+        assert!(matches!(req.query, QueryExpr::And(ref items) if items.is_empty()));
     }
 
     #[test]
@@ -384,10 +382,7 @@ mod tests {
         assert!(matches!(req.mode, SearchMode::Auto));
         assert_eq!(req.timeout, None);
         assert_eq!(req.offset, 0);
-        match req.query {
-            QueryExpr::And(items) => assert!(items.is_empty()),
-            _ => panic!("default query should be And([])"),
-        }
+        assert!(matches!(req.query, QueryExpr::And(ref items) if items.is_empty()));
     }
 
     #[test]
