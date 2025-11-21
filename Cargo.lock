@@ -1381,6 +1381,8 @@ dependencies = [
  "core-types",
  "dotenvy",
  "ipc",
+ "serde",
+ "serde_json",
  "tracing",
  "tracing-subscriber",
 ]
@@ -2565,6 +2567,7 @@ dependencies = [
  "core-types",
  "dotenvy",
  "ipc",
+ "memmap2",
  "meta-index",
  "ntfs-watcher",
  "once_cell",
