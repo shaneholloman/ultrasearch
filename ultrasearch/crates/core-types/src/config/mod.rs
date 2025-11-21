@@ -1,11 +1,11 @@
-use std::{fs, path::Path};
+use std::{fs, path::{Path, PathBuf}};
 
 use anyhow::Result;
 use once_cell::sync::OnceCell;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Global configuration root loaded from `.env` + `config/config.toml`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     #[serde(default)]
     pub app: AppSection,
@@ -25,6 +25,25 @@ pub struct AppConfig {
     pub semantic: SemanticSection,
 }
 
+/// Load config, creating a default config file if none exists at the target path.
+pub fn load_or_create_config(path: Option<&Path>) -> Result<&'static AppConfig> {
+    let target: PathBuf = path
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("config/config.toml"));
+
+    if !target.exists() {
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut cfg = AppConfig::default();
+        apply_placeholders(&mut cfg);
+        let toml = toml::to_string_pretty(&cfg)?;
+        fs::write(&target, toml)?;
+    }
+
+    load_config(path)
+}
+
 #[allow(clippy::derivable_impls)]
 impl Default for AppConfig {
     fn default() -> Self {
@@ -42,7 +61,7 @@ impl Default for AppConfig {
 }
 
 /// Common app-wide metadata.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSection {
     #[serde(default = "default_product_uid")]
     pub product_uid: String,
@@ -68,7 +87,7 @@ fn default_data_dir() -> String {
 }
 
 /// Logging configuration.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoggingSection {
     #[serde(default = "default_log_level")]
     pub level: String,
@@ -117,7 +136,7 @@ fn default_log_retain() -> u32 {
 }
 
 /// Metrics configuration.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricsSection {
     #[serde(default)]
     pub enabled: bool,
@@ -163,7 +182,7 @@ fn default_worker_failure_threshold() -> u64 {
 }
 
 /// Feature flags toggling advanced modules.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeaturesSection {
     #[serde(default)]
     pub multi_tier_index: bool,
@@ -203,7 +222,7 @@ impl Default for FeaturesSection {
 }
 
 /// Scheduler thresholds (base values; may be tuned adaptively).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchedulerSection {
     #[serde(default = "default_idle_warm")]
     pub idle_warm_seconds: u64,
@@ -264,7 +283,7 @@ fn default_content_batch() -> u64 {
 }
 
 /// Index and state paths.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PathsSection {
     #[serde(default = "default_meta_index_path")]
     pub meta_index: String,
@@ -301,7 +320,7 @@ fn default_jobs_dir() -> String {
 }
 
 /// Extraction limits and flags.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtractSection {
     #[serde(default = "default_max_bytes")]
     pub max_bytes_per_file: u64,
@@ -335,7 +354,7 @@ fn default_ocr_max_pages() -> u64 {
 }
 
 /// Semantic search configuration.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SemanticSection {
     #[serde(default)]
     pub enabled: bool,

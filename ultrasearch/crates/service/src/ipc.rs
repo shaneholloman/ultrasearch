@@ -1,9 +1,9 @@
 #![cfg(target_os = "windows")]
 
 use anyhow::Result;
-use ipc::{SearchRequest, StatusRequest, StatusResponse};
-use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
+use ipc::{framing, SearchRequest, StatusRequest, StatusResponse};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
@@ -36,22 +36,32 @@ pub async fn start_pipe_server(pipe_name: Option<&str>) -> Result<JoinHandle<()>
 }
 
 async fn handle_connection(conn: &mut NamedPipeServer) -> Result<()> {
-    let mut len_buf = [0u8; 4];
-    // Simple length-prefixed framing
     loop {
-        if conn.read_exact(&mut len_buf).await.is_err() {
+        // decode frame
+        let mut len_prefix = [0u8; 4];
+        if conn.read_exact(&mut len_prefix).await.is_err() {
             break;
         }
-        let len = u32::from_le_bytes(len_buf) as usize;
-        if len == 0 || len > MAX_MESSAGE_BYTES {
-            tracing::warn!("invalid frame size {}", len);
+        let frame_len = u32::from_le_bytes(len_prefix) as usize;
+        if frame_len == 0 || frame_len > MAX_MESSAGE_BYTES {
+            tracing::warn!("invalid frame size {}", frame_len);
             break;
         }
-        let mut buf = vec![0u8; len];
+        let mut buf = vec![0u8; frame_len];
         conn.read_exact(&mut buf).await?;
-        let response = dispatch(&buf);
-        conn.write_all(&(response.len() as u32).to_le_bytes()).await?;
-        conn.write_all(&response).await?;
+
+        let payload = match framing::decode_frame(&buf) {
+            Ok((payload, _rem)) => payload,
+            Err(e) => {
+                tracing::warn!("failed to decode frame: {e}");
+                continue;
+            }
+        };
+
+        let response = dispatch(&payload);
+        let framed = framing::encode_frame(&response).unwrap_or_default();
+        conn.write_all(&(framed.len() as u32).to_le_bytes()).await?;
+        conn.write_all(&framed).await?;
     }
     Ok(())
 }

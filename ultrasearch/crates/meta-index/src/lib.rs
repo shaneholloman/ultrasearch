@@ -80,7 +80,7 @@ pub fn add_batch(
     docs: impl IntoIterator<Item = MetaDoc>,
 ) -> Result<()> {
     for doc in docs {
-        let _ = writer.add_document(to_document(&doc, fields));
+        writer.add_document(to_document(&doc, fields))?;
     }
     Ok(())
 }
@@ -127,11 +127,9 @@ impl Default for WriterConfig {
 
 /// Create an `IndexWriter` with the provided configuration.
 pub fn create_writer(meta: &MetaIndex, cfg: &WriterConfig) -> Result<IndexWriter> {
-    let writer = meta
-        .index
-        .writer_with_num_threads(cfg.num_threads, cfg.heap_size_bytes)?;
-    // For metadata we prefer merges that keep segment counts modest but not enormous; rely on Tantivy defaults for now.
-    Ok(writer)
+    meta.index
+        .writer_with_num_threads(cfg.num_threads, cfg.heap_size_bytes)
+        .map_err(Into::into)
 }
 
 /// Open a read-only handle with minimal caching suitable for the long-lived service.

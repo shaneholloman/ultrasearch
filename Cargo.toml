@@ -5,7 +5,7 @@ members = [
 ]
 
 [workspace.package]
-edition = "2021" # temporary until edition2024 stabilizes in nightly cargo
+edition = "2024" # nightly policy
 rust-version = "1.84"
 version = "0.1.0"
 license = "MIT OR Apache-2.0"
@@ -44,7 +44,7 @@ windows = { version = "0.52", features = [
     "Win32_System_Com",
     "Win32_UI_WindowsAndMessaging",
 ] }
-windows-sys = { version = "0.52.0", features = [
+windows-sys = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_System_SystemInformation",
     "Win32_System_Console",
@@ -57,7 +57,8 @@ windows-sys = { version = "0.52.0", features = [
     "Win32_System_Com",
     "Win32_UI_WindowsAndMessaging",
 ] }
-sysinfo = { version = "0.30.13", default-features = true }
+windows-future = "0.2.1"
+sysinfo = "*"
 tantivy = { version = "*", features = ["mmap", "lz4-compression"] }
 fst = "*"
 memmap2 = "*"
@@ -65,7 +66,6 @@ extractous = { version = "*" }
 reqwest = { version = "*", default-features = false, features = ["rustls-tls", "stream"] }
 image = { version = "*", default-features = false, features = ["png", "jpeg"] }
 uuid = { version = "*", features = ["v4"] }
-usn-journal-rs = { version = "*", default-features = true }
 tracing = "*"
 tracing-subscriber = { version = "*", features = ["env-filter", "fmt"] }
 smallvec = "*"

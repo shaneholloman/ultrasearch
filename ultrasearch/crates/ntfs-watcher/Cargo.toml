@@ -1,3 +1,7 @@
+[features]
+default = []
+windows-driver = ["windows"]
+
 [package]
 name = "ntfs-watcher"
 version = "0.1.0"
@@ -14,5 +18,4 @@ sysinfo = { workspace = true }
 thiserror = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows = { workspace = true }
-usn-journal-rs = "*"
+windows = { workspace = true, optional = true }
