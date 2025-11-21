@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use ipc::{framing, SearchRequest, StatusRequest, StatusResponse};
+use service::status::make_status_response;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::task::JoinHandle;
@@ -69,13 +70,21 @@ async fn handle_connection(conn: &mut NamedPipeServer) -> Result<()> {
 fn dispatch(payload: &[u8]) -> Vec<u8> {
     // Try StatusRequest first.
     if let Ok(req) = bincode::deserialize::<StatusRequest>(payload) {
-        let resp = StatusResponse {
-            id: req.id,
-            volumes: Vec::new(),
-            last_index_commit_ts: None,
-            scheduler_state: "unknown".into(),
-            metrics: None,
+        let empty_metrics = ipc::MetricsSnapshot {
+            search_latency_ms_p50: None,
+            search_latency_ms_p95: None,
+            worker_cpu_pct: None,
+            worker_mem_bytes: None,
+            queue_depth: Some(0),
+            active_workers: Some(0),
         };
+        let resp = make_status_response(
+            req.id,
+            Vec::new(),              // TODO: wire real volume data
+            "unknown".to_string(),   // TODO: pull scheduler state
+            Some(empty_metrics),
+            None,
+        );
         return bincode::serialize(&resp).unwrap_or_default();
     }
     // Fallback: echo SearchRequest id.
@@ -94,6 +103,7 @@ fn dispatch(payload: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use service::status::make_status_response;
 
     #[tokio::test]
     async fn echoes_uuid_prefix() {
@@ -109,6 +119,7 @@ mod tests {
         let resp: StatusResponse = bincode::deserialize(&resp_bytes).unwrap();
         assert_eq!(resp.id, req.id);
         assert!(resp.volumes.is_empty());
+        assert_eq!(resp.metrics.as_ref().and_then(|m| m.queue_depth), Some(0));
     }
 
     #[test]
