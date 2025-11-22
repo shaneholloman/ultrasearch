@@ -1,0 +1,15 @@
+[package]
+name = "launcher"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "One-click launcher that boots the UltraSearch service then opens the UI"
+
+[dependencies]
+anyhow = { workspace = true }
+console = { workspace = true }
+dotenvy = { workspace = true }
+ipc = { path = "../ipc" }
+tokio = { workspace = true, features = ["rt", "time", "net"] }
+uuid = { workspace = true }
