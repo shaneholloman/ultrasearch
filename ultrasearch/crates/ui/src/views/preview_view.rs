@@ -321,8 +321,11 @@ impl Render for PreviewView {
                                 .rounded_lg()
                                 .max_h(px(260.))
                                 .child({
-                                    let mut lines: Vec<String> =
-                                        snippet.to_string().lines().map(|l| l.to_string()).collect();
+                                    let mut lines: Vec<String> = snippet
+                                        .to_string()
+                                        .lines()
+                                        .map(|l| l.to_string())
+                                        .collect();
                                     if lines.is_empty() {
                                         lines.push(String::new());
                                     }
