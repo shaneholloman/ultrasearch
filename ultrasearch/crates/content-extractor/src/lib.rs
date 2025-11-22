@@ -255,7 +255,7 @@ impl Extractor for ExtractousExtractor {
 
     fn supports(&self, ctx: &ExtractContext) -> bool {
         fs::metadata(ctx.path)
-            .map(|meta| meta.is_file() && meta.len() <= ctx.max_bytes as u64)
+            .map(|meta| meta.is_file())
             .unwrap_or(false)
     }
 
