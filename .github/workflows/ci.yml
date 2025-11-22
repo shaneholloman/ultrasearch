@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  windows-ci:
+    name: Windows / Tests + MSI
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly with components
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy,rustfmt
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Cargo fmt
+        run: cargo fmt --check
+
+      - name: Cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Cargo test (all targets, all features)
+        run: cargo test --all-targets --all-features -- --nocapture
+
+      - name: Install WiX Toolset
+        run: |
+          choco install wixtoolset --version 3.14.0 -y
+          "WIX=$([System.Environment]::GetEnvironmentVariable('ProgramFiles(x86)'))\WiX Toolset v3.14\bin" >> $env:GITHUB_ENV
+
+      - name: Install cargo-wix
+        run: cargo install cargo-wix --locked
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Build unsigned MSI (ui crate)
+        run: |
+          cd ultrasearch/crates/ui
+          cargo wix -p ui
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ultrasearch-msi
+          path: ultrasearch/crates/ui/target/wix/*.msi
+
+      - name: Upload release binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ultrasearch-release-bin
+          path: ultrasearch/target/release/ui.exe
