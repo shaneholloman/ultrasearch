@@ -11,6 +11,7 @@ use anyhow::Result;
 use ipc::{MetricsSnapshot, SearchRequest, StatusRequest, framing};
 #[cfg(test)]
 use ipc::{SearchResponse, StatusResponse};
+use std::io::Cursor;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::task::JoinHandle;
@@ -90,8 +91,24 @@ async fn handle_connection(mut conn: NamedPipeServer) -> Result<()> {
 }
 
 fn dispatch(payload: &[u8]) -> Vec<u8> {
+    fn deserialize_exact<T: serde::de::DeserializeOwned>(payload: &[u8]) -> Option<T> {
+        let mut cursor = Cursor::new(payload);
+        match bincode::deserialize_from::<_, T>(&mut cursor) {
+            Ok(v) if cursor.position() as usize == payload.len() => Some(v),
+            _ => None,
+        }
+    }
+
+    // Fast-path: ping echo when payload is prefixed with "PING" + UUID.
+    if payload.len() >= 20
+        && payload.starts_with(b"PING")
+        && let Ok(id) = Uuid::from_slice(&payload[4..20])
+    {
+        return id.as_bytes().to_vec();
+    }
+
     // Try StatusRequest first.
-    if let Ok(req) = bincode::deserialize::<StatusRequest>(payload) {
+    if let Some(req) = deserialize_exact::<StatusRequest>(payload) {
         let started = Instant::now();
         let snap = status_snapshot();
         let empty_metrics =
@@ -117,9 +134,16 @@ fn dispatch(payload: &[u8]) -> Vec<u8> {
         return encoded;
     }
     // Fallback: dispatch SearchRequest.
-    if let Ok(req) = bincode::deserialize::<SearchRequest>(payload) {
+    if let Some(req) = deserialize_exact::<SearchRequest>(payload) {
         let start = Instant::now();
+        let req_clone = req.clone();
         let mut resp = search(req);
+        // Ensure the echoed id always matches the request for protocol stability.
+        // search(req) should propagate id, but we enforce it defensively.
+        // Use the id already in resp if set, otherwise fallback to request id.
+        if resp.id.is_nil() {
+            resp.id = req_clone.id;
+        }
         let elapsed = start.elapsed();
         let took = elapsed.as_millis().min(u32::MAX as u128) as u32;
         if resp.took_ms == 0 {
@@ -133,11 +157,6 @@ fn dispatch(payload: &[u8]) -> Vec<u8> {
         return encoded;
     }
     // If payload decodes as a UUID prefix, echo it back.
-    if payload.len() >= 16
-        && let Ok(id) = Uuid::from_slice(&payload[..16])
-    {
-        return id.as_bytes().to_vec();
-    }
     Vec::new()
 }
 
@@ -154,7 +173,9 @@ mod tests {
     #[tokio::test]
     async fn echoes_uuid_prefix() {
         let id = Uuid::new_v4();
-        let resp = dispatch(id.as_bytes());
+        let mut payload = b"PING".to_vec();
+        payload.extend_from_slice(id.as_bytes());
+        let resp = dispatch(&payload);
         assert_eq!(resp, id.as_bytes());
     }
 
