@@ -982,9 +982,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.2.46"
+version = "1.2.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b97463e1064cb1b1c1384ad0a0b9c8abd0988e2a91f52606c80ef14aadb63e36"
+checksum = "cd405d82c84ff7f35739f175f67d8b9fb7687a0e84ccdc78bd3568839827cf07"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -1205,7 +1205,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#550442e10000c63de1f083c3f7f1aab0ab41ed8e"
+source = "git+https://github.com/zed-industries/zed.git#bfe141ea79aa4984028934067ba75c48d99136ae"
 dependencies = [
  "indexmap",
  "rustc-hash 2.1.1",
@@ -1737,7 +1737,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#550442e10000c63de1f083c3f7f1aab0ab41ed8e"
+source = "git+https://github.com/zed-industries/zed.git#bfe141ea79aa4984028934067ba75c48d99136ae"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2675,7 +2675,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.2.2"
-source = "git+https://github.com/zed-industries/zed.git#550442e10000c63de1f083c3f7f1aab0ab41ed8e"
+source = "git+https://github.com/zed-industries/zed.git#bfe141ea79aa4984028934067ba75c48d99136ae"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -2774,7 +2774,7 @@ dependencies = [
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#550442e10000c63de1f083c3f7f1aab0ab41ed8e"
+source = "git+https://github.com/zed-industries/zed.git#bfe141ea79aa4984028934067ba75c48d99136ae"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -2996,7 +2996,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#550442e10000c63de1f083c3f7f1aab0ab41ed8e"
+source = "git+https://github.com/zed-industries/zed.git#bfe141ea79aa4984028934067ba75c48d99136ae"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -3943,7 +3943,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#550442e10000c63de1f083c3f7f1aab0ab41ed8e"
+source = "git+https://github.com/zed-industries/zed.git#bfe141ea79aa4984028934067ba75c48d99136ae"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -4249,7 +4249,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "core-types",
- "sysinfo",
+ "sysinfo 0.37.2",
  "thiserror 2.0.17",
  "tracing",
  "usn-journal-rs",
@@ -4451,6 +4451,16 @@ checksum = "e3e0adef53c21f888deb4fa59fc59f7eb17404926ee8a6f59f5df0fd7f9f3272"
 dependencies = [
  "bitflags 2.10.0",
  "objc2",
+ "objc2-core-foundation",
+]
+
+[[package]]
+name = "objc2-io-kit"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33fafba39597d6dc1fb709123dfa8289d39406734be322956a69f0931c73bb15"
+dependencies = [
+ "libc",
  "objc2-core-foundation",
 ]
 
@@ -4737,7 +4747,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "perf"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#550442e10000c63de1f083c3f7f1aab0ab41ed8e"
+source = "git+https://github.com/zed-industries/zed.git#bfe141ea79aa4984028934067ba75c48d99136ae"
 dependencies = [
  "collections",
  "serde",
@@ -4978,9 +4988,9 @@ dependencies = [
 
 [[package]]
 name = "prometheus"
-version = "0.13.4"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d33c28a30771f7f96db69893f78b857f7450d7e0237e9c8fc6427a81bae7ed1"
+checksum = "3ca5326d8d0b950a9acd87e6a3f94745394f62e4dae1b1ee22b2bc0c394af43a"
 dependencies = [
  "cfg-if",
  "fnv",
@@ -4988,14 +4998,28 @@ dependencies = [
  "memchr",
  "parking_lot",
  "protobuf",
- "thiserror 1.0.69",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
 name = "protobuf"
-version = "2.28.0"
+version = "3.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
+checksum = "d65a1d4ddae7d8b5de68153b48f6aa3bba8cb002b243dbdbc55a5afbc98f99f4"
+dependencies = [
+ "once_cell",
+ "protobuf-support",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "protobuf-support"
+version = "3.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e36c2f31e0a47f9280fb347ef5e461ffcd2c52dd520d8e216b52f93b0b0d7d6"
+dependencies = [
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "psm"
@@ -5381,7 +5405,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#550442e10000c63de1f083c3f7f1aab0ab41ed8e"
+source = "git+https://github.com/zed-industries/zed.git#bfe141ea79aa4984028934067ba75c48d99136ae"
 dependencies = [
  "derive_refineable",
 ]
@@ -5760,7 +5784,7 @@ dependencies = [
  "anyhow",
  "core-types",
  "crossbeam-channel",
- "sysinfo",
+ "sysinfo 0.37.2",
  "tracing",
  "windows 0.52.0",
 ]
@@ -5886,7 +5910,7 @@ dependencies = [
 [[package]]
 name = "semantic_version"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#550442e10000c63de1f083c3f7f1aab0ab41ed8e"
+source = "git+https://github.com/zed-industries/zed.git#bfe141ea79aa4984028934067ba75c48d99136ae"
 dependencies = [
  "anyhow",
  "serde",
@@ -6347,7 +6371,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#550442e10000c63de1f083c3f7f1aab0ab41ed8e"
+source = "git+https://github.com/zed-industries/zed.git#bfe141ea79aa4984028934067ba75c48d99136ae"
 dependencies = [
  "arrayvec",
  "log",
@@ -6536,6 +6560,20 @@ dependencies = [
  "ntapi",
  "rayon",
  "windows 0.57.0",
+]
+
+[[package]]
+name = "sysinfo"
+version = "0.37.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16607d5caffd1c07ce073528f9ed972d88db15dd44023fa57142963be3feb11f"
+dependencies = [
+ "libc",
+ "memchr",
+ "ntapi",
+ "objc2-core-foundation",
+ "objc2-io-kit",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -7469,7 +7507,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#550442e10000c63de1f083c3f7f1aab0ab41ed8e"
+source = "git+https://github.com/zed-industries/zed.git#bfe141ea79aa4984028934067ba75c48d99136ae"
 dependencies = [
  "anyhow",
  "async-fs",
@@ -7505,7 +7543,7 @@ dependencies = [
 [[package]]
 name = "util_macros"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed.git#550442e10000c63de1f083c3f7f1aab0ab41ed8e"
+source = "git+https://github.com/zed-industries/zed.git#bfe141ea79aa4984028934067ba75c48d99136ae"
 dependencies = [
  "perf",
  "quote",
@@ -8883,7 +8921,7 @@ dependencies = [
  "rand 0.8.5",
  "screencapturekit",
  "screencapturekit-sys",
- "sysinfo",
+ "sysinfo 0.31.4",
  "tao-core-video-sys",
  "windows 0.61.3",
  "windows-capture",

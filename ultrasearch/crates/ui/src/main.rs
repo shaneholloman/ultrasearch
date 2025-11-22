@@ -213,6 +213,13 @@ impl Render for UltraSearchWindow {
 }
 
 fn main() {
+    // Provide a Tokio runtime so async tasks in the UI (status/search polling) have a reactor.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("build tokio runtime");
+    let _rt_guard = runtime.enter();
+
     // Load configuration
     if let Err(e) = core_types::config::load_or_create_config(None) {
         eprintln!("Failed to load configuration: {}", e);
