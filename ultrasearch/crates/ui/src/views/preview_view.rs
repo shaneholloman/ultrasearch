@@ -297,6 +297,7 @@ impl Render for PreviewView {
                                 .border_color(snippet_border())
                                 .rounded_lg()
                                 .max_h(px(260.))
+                                .overflow_y_scroll()
                                 .text_size(px(12.))
                                 .text_color(text_secondary())
                                 .child(snippet),

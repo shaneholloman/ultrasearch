@@ -27,6 +27,7 @@ pub struct SearchStatus {
     pub shown: usize,
     pub last_latency_ms: Option<u32>,
     pub connected: bool,
+    pub in_flight: bool,
     pub backend_mode: BackendMode,
     pub indexing_state: String,
 }
@@ -38,6 +39,7 @@ impl Default for SearchStatus {
             shown: 0,
             last_latency_ms: None,
             connected: false,
+            in_flight: false,
             backend_mode: BackendMode::Mixed,
             indexing_state: "Idle".to_string(),
         }
@@ -168,6 +170,15 @@ impl SearchAppModel {
                     };
 
                     let start = Instant::now();
+                    let _ = async_app.update(|app| {
+                        this.update(
+                            app,
+                            |model: &mut SearchAppModel, cx: &mut Context<SearchAppModel>| {
+                                model.status.in_flight = true;
+                                cx.notify();
+                            },
+                        )
+                    });
                     match client.search(req).await {
                         Ok(resp) => {
                             let latency = start.elapsed().as_millis() as u32;
@@ -176,6 +187,7 @@ impl SearchAppModel {
                                     app,
                                     |model: &mut SearchAppModel,
                                      cx: &mut Context<SearchAppModel>| {
+                                        model.status.in_flight = false;
                                         model.results = resp.hits;
                                         model.status.total = resp.total;
                                         model.status.shown = model.results.len();
@@ -198,6 +210,7 @@ impl SearchAppModel {
                                     app,
                                     |model: &mut SearchAppModel,
                                      cx: &mut Context<SearchAppModel>| {
+                                        model.status.in_flight = false;
                                         model.status.connected = false;
                                         model.status.indexing_state =
                                             "Disconnected (search)".to_string();

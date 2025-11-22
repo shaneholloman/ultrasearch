@@ -46,7 +46,7 @@ pub struct SearchView {
 
 impl SearchView {
     pub fn new(model: Entity<SearchAppModel>, cx: &mut Context<SearchView>) -> Self {
-        let focus_handle = cx.focus_handle();
+        let focus_handle = cx.focus_handle().tab_stop(true).tab_index(0);
         cx.observe(&model, |_, _, cx| cx.notify()).detach();
 
         Self {
@@ -233,7 +233,7 @@ impl SearchView {
         cx.notify();
     }
 
-    fn clear_search(&mut self, cx: &mut Context<Self>) {
+    pub fn clear_search(&mut self, cx: &mut Context<Self>) {
         self.input_text = "".into();
         self.cursor = 0;
         self.selection = None;
@@ -276,6 +276,8 @@ impl SearchView {
             .px_3()
             .py_1p5()
             .rounded_md()
+            .tab_stop(true)
+            .tab_index(0)
             .when(is_active, |this| {
                 this.bg(accent_blue()).text_color(white()).shadow_sm()
             })
@@ -284,6 +286,7 @@ impl SearchView {
                     .text_color(text_secondary())
                     .hover(|style| style.bg(input_bg_focus()).text_color(text_primary()))
             })
+            .focus_visible(|style| style.border_1().border_color(input_border_focus()))
             .cursor_pointer()
             .child(div().text_size(px(14.)).child(icon))
             .child(
@@ -300,7 +303,7 @@ impl SearchView {
 }
 
 impl Render for SearchView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let model = self.model.read(cx);
         let status = model.status.clone();
         let query = model.query.clone();
@@ -353,10 +356,13 @@ impl Render for SearchView {
                             .rounded_lg()
                             .text_color(text_primary())
                             .text_size(px(15.))
-                            .when(self.focus_handle.is_focused(window), |this| {
-                                this.bg(input_bg_focus())
+                            .focus(|style| {
+                                style
                                     .border_color(input_border_focus())
-                                    .shadow_md()
+                                    .bg(input_bg_focus())
+                            })
+                            .focus_visible(|style| {
+                                style.border_color(input_border_focus()).shadow_md()
                             })
                             .cursor(CursorStyle::IBeam)
                             .on_mouse_down(
@@ -482,9 +488,14 @@ impl Render for SearchView {
                                 .px_2()
                                 .py_1p5()
                                 .rounded_md()
+                                .tab_stop(true)
+                                .tab_index(0)
                                 .text_color(text_secondary())
                                 .hover(|style| {
                                     style.bg(input_bg_focus()).text_color(text_primary())
+                                })
+                                .focus_visible(|style| {
+                                    style.border_1().border_color(input_border_focus())
                                 })
                                 .cursor_pointer()
                                 .child("✕")
@@ -538,6 +549,11 @@ impl Render for SearchView {
                             .items_center()
                             .gap_4()
                             .text_size(px(12.))
+                            .child(
+                                div()
+                                    .text_color(text_secondary())
+                                    .child(if status.in_flight { "⏳" } else { " " }),
+                            )
                             .child(
                                 div()
                                     .flex()
@@ -599,7 +615,38 @@ impl Render for SearchView {
                                         "Disconnected"
                                     }),
                             ),
-                    ),
+                    )
+                    .when(!status.connected, |this| {
+                        this.child(
+                            div()
+                                .ml_3()
+                                .px_2()
+                                .py_1()
+                                .rounded_md()
+                                .bg(status_error())
+                                .text_color(white())
+                                .text_size(px(11.))
+                                .cursor_pointer()
+                                .hover(|s| s.bg(hsla(0.0, 0.903, 0.7, 1.0)))
+                                .focus_visible(|s| s.border_1().border_color(input_border_focus()))
+                                .tab_stop(true)
+                                .tab_index(0)
+                                .child("Retry")
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _, _, cx| {
+                                        this.model.update(cx, |model, cx| {
+                                            let current = model.query.clone();
+                                            if current.is_empty() {
+                                                model.start_status_polling(cx);
+                                            } else {
+                                                model.set_query(current, cx);
+                                            }
+                                        });
+                                    }),
+                                ),
+                        )
+                    }),
             )
     }
 }

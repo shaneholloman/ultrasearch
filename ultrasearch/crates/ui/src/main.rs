@@ -4,11 +4,28 @@
 //! search with deep content indexing, wrapped in a beautiful native UI.
 
 use gpui::prelude::*;
-use gpui::*;
+use gpui::{actions, KeyBinding, *};
 use ui::model::state::{BackendMode, SearchAppModel};
 use ui::views::preview_view::PreviewView;
 use ui::views::results_table::ResultsView;
 use ui::views::search_view::SearchView;
+
+actions!(
+    ultrasearch,
+    [
+        FocusSearch,
+        ClearSearch,
+        SubmitSearch,
+        SelectNext,
+        SelectPrev,
+        OpenSelected,
+        ModeMetadata,
+        ModeMixed,
+        ModeContent,
+        CopySelectedPath,
+        QuitApp
+    ]
+);
 
 fn app_bg() -> Hsla {
     hsla(0.0, 0.0, 0.102, 1.0)
@@ -48,93 +65,97 @@ impl UltraSearchWindow {
         }
     }
 
-    fn handle_key_down(
+    fn on_focus_search(&mut self, _: &FocusSearch, window: &mut Window, cx: &mut Context<Self>) {
+        self.search_view.update(cx, |view, _cx| {
+            window.focus(&view.focus_handle());
+        });
+    }
+
+    fn on_clear_search(&mut self, _: &ClearSearch, _window: &mut Window, cx: &mut Context<Self>) {
+        self.model.update(cx, |model, cx| {
+            model.set_query(String::new(), cx);
+        });
+        self.search_view.update(cx, |view, cx| {
+            view.clear_search(cx);
+        });
+    }
+
+    fn on_select_next(&mut self, _: &SelectNext, _window: &mut Window, cx: &mut Context<Self>) {
+        self.model.update(cx, |model, cx| model.select_next(cx));
+    }
+
+    fn on_select_prev(&mut self, _: &SelectPrev, _window: &mut Window, cx: &mut Context<Self>) {
+        self.model.update(cx, |model, cx| model.select_previous(cx));
+    }
+
+    fn on_submit_search(&mut self, _: &SubmitSearch, window: &mut Window, cx: &mut Context<Self>) {
+        self.search_view.update(cx, |view, _cx| {
+            window.focus(&view.focus_handle());
+        });
+        self.open_selected(window, cx);
+    }
+
+    fn on_open_selected(&mut self, _: &OpenSelected, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_selected(window, cx);
+    }
+
+    fn on_mode_metadata(&mut self, _: &ModeMetadata, _window: &mut Window, cx: &mut Context<Self>) {
+        self.model.update(cx, |model, cx| {
+            model.set_backend_mode(BackendMode::MetadataOnly, cx)
+        });
+    }
+
+    fn on_mode_mixed(&mut self, _: &ModeMixed, _window: &mut Window, cx: &mut Context<Self>) {
+        self.model.update(cx, |model, cx| {
+            model.set_backend_mode(BackendMode::Mixed, cx)
+        });
+    }
+
+    fn on_mode_content(&mut self, _: &ModeContent, _window: &mut Window, cx: &mut Context<Self>) {
+        self.model.update(cx, |model, cx| {
+            model.set_backend_mode(BackendMode::ContentOnly, cx)
+        });
+    }
+
+    fn on_copy_selected_path(
         &mut self,
-        event: &KeyDownEvent,
-        window: &mut Window,
+        _: &CopySelectedPath,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let modifiers = &event.keystroke.modifiers;
-        let key = &event.keystroke.key;
+        if let Some(path) = self
+            .model
+            .read(cx)
+            .selected_row()
+            .and_then(|hit| hit.path.clone())
+        {
+            cx.write_to_clipboard(ClipboardItem::new_string(path));
+        }
+    }
 
-        match (
-            key.as_str(),
-            modifiers.platform || modifiers.control,
-            modifiers.shift,
-        ) {
-            // Ctrl/Cmd+K: Focus search
-            ("k", true, false) => {
-                self.search_view.update(cx, |view, _cx| {
-                    window.focus(&view.focus_handle());
-                });
-                cx.stop_propagation();
+    fn on_quit(&mut self, _: &QuitApp, _window: &mut Window, cx: &mut Context<Self>) {
+        cx.quit();
+    }
+
+    fn open_selected(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(path) = self
+            .model
+            .read(cx)
+            .selected_row()
+            .and_then(|hit| hit.path.clone())
+        {
+            #[cfg(target_os = "windows")]
+            {
+                let _ = std::process::Command::new("explorer").arg(&path).spawn();
             }
-            // Escape: Clear search
-            ("escape", false, false) => {
-                self.model.update(cx, |model, cx| {
-                    model.set_query(String::new(), cx);
-                });
-                cx.stop_propagation();
+            #[cfg(target_os = "macos")]
+            {
+                let _ = std::process::Command::new("open").arg(&path).spawn();
             }
-            // Up arrow: Previous result
-            ("up", false, false) => {
-                self.model.update(cx, |model, cx| model.select_previous(cx));
-                cx.stop_propagation();
+            #[cfg(target_os = "linux")]
+            {
+                let _ = std::process::Command::new("xdg-open").arg(&path).spawn();
             }
-            // Down arrow: Next result
-            ("down", false, false) => {
-                self.model.update(cx, |model, cx| model.select_next(cx));
-                cx.stop_propagation();
-            }
-            // Enter: open selected file
-            ("enter", false, false) => {
-                if let Some(path) = self
-                    .model
-                    .read(cx)
-                    .selected_row()
-                    .and_then(|hit| hit.path.clone())
-                {
-                    #[cfg(target_os = "windows")]
-                    {
-                        let _ = std::process::Command::new("explorer").arg(&path).spawn();
-                    }
-                    #[cfg(target_os = "macos")]
-                    {
-                        let _ = std::process::Command::new("open").arg(&path).spawn();
-                    }
-                    #[cfg(target_os = "linux")]
-                    {
-                        let _ = std::process::Command::new("xdg-open").arg(&path).spawn();
-                    }
-                }
-                cx.stop_propagation();
-            }
-            // Ctrl/Cmd+1: Name-only mode
-            ("1", true, false) => {
-                self.model.update(cx, |model, cx| {
-                    model.set_backend_mode(BackendMode::MetadataOnly, cx);
-                });
-                cx.stop_propagation();
-            }
-            // Ctrl/Cmd+2: Mixed mode
-            ("2", true, false) => {
-                self.model.update(cx, |model, cx| {
-                    model.set_backend_mode(BackendMode::Mixed, cx);
-                });
-                cx.stop_propagation();
-            }
-            // Ctrl/Cmd+3: Content mode
-            ("3", true, false) => {
-                self.model.update(cx, |model, cx| {
-                    model.set_backend_mode(BackendMode::ContentOnly, cx);
-                });
-                cx.stop_propagation();
-            }
-            // Ctrl/Cmd+Q: Quit application
-            ("q", true, false) => {
-                cx.quit();
-            }
-            _ => {}
         }
     }
 }
@@ -143,7 +164,17 @@ impl Render for UltraSearchWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .track_focus(&self.focus_handle)
-            .on_key_down(cx.listener(Self::handle_key_down))
+            .on_action(cx.listener(Self::on_focus_search))
+            .on_action(cx.listener(Self::on_clear_search))
+            .on_action(cx.listener(Self::on_select_next))
+            .on_action(cx.listener(Self::on_select_prev))
+            .on_action(cx.listener(Self::on_submit_search))
+            .on_action(cx.listener(Self::on_open_selected))
+            .on_action(cx.listener(Self::on_mode_metadata))
+            .on_action(cx.listener(Self::on_mode_mixed))
+            .on_action(cx.listener(Self::on_mode_content))
+            .on_action(cx.listener(Self::on_copy_selected_path))
+            .on_action(cx.listener(Self::on_quit))
             .size_full()
             .flex()
             .flex_col()
@@ -190,6 +221,27 @@ fn main() {
 
     // Initialize GPUI application
     Application::new().run(|cx: &mut App| {
+        cx.bind_keys([
+            KeyBinding::new("cmd-k", FocusSearch, None),
+            KeyBinding::new("ctrl-k", FocusSearch, None),
+            KeyBinding::new("escape", ClearSearch, None),
+            KeyBinding::new("enter", SubmitSearch, None),
+            KeyBinding::new("down", SelectNext, None),
+            KeyBinding::new("up", SelectPrev, None),
+            KeyBinding::new("cmd-1", ModeMetadata, None),
+            KeyBinding::new("ctrl-1", ModeMetadata, None),
+            KeyBinding::new("cmd-2", ModeMixed, None),
+            KeyBinding::new("ctrl-2", ModeMixed, None),
+            KeyBinding::new("cmd-3", ModeContent, None),
+            KeyBinding::new("ctrl-3", ModeContent, None),
+            KeyBinding::new("cmd-o", OpenSelected, None),
+            KeyBinding::new("ctrl-o", OpenSelected, None),
+            KeyBinding::new("cmd-c", CopySelectedPath, None),
+            KeyBinding::new("ctrl-c", CopySelectedPath, None),
+            KeyBinding::new("cmd-q", QuitApp, None),
+            KeyBinding::new("ctrl-q", QuitApp, None),
+        ]);
+
         // Open the main window
         cx.open_window(
             WindowOptions {
@@ -223,7 +275,7 @@ fn main() {
         // Print startup message
         eprintln!("✅ UltraSearch started successfully!");
         eprintln!("🌀 Keyboard shortcuts:");
-        eprintln!("   Ctrl+K        - Focus search");
+        eprintln!("   Ctrl/Cmd+K    - Focus search");
         eprintln!("   Escape        - Clear search");
         eprintln!("   ↑/↓           - Navigate results");
         eprintln!("   Ctrl+1/2/3    - Switch search modes");

@@ -47,8 +47,12 @@ impl ResultsView {
         let list_state = ListState::new(0, ListAlignment::Top, row_height());
 
         cx.observe(&model, |this: &mut Self, model, cx| {
-            let count = model.read(cx).results.len();
+            let read = model.read(cx);
+            let count = read.results.len();
             this.list_state.reset(count);
+            if let Some(sel) = read.selected_index {
+                this.list_state.scroll_to_reveal_item(sel);
+            }
             cx.notify();
         })
         .detach();
@@ -197,17 +201,21 @@ impl ResultsView {
             .border_b_1()
             .border_color(border_color())
             .cursor_pointer()
+            .tab_stop(true)
+            .tab_index(0)
+            .focus_visible(|style| style.border_color(row_selected()).border_2())
             .on_mouse_move(cx.listener(move |this, _, _, cx| {
-                this.hover_index = Some(index);
-                cx.notify();
+                if this.hover_index != Some(index) {
+                    this.hover_index = Some(index);
+                    cx.notify();
+                }
             }))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                    this.handle_click(index, cx);
                     if event.click_count >= 2 {
                         this.handle_double_click(index, cx);
-                    } else {
-                        this.handle_click(index, cx);
                     }
                 }),
             )
@@ -227,6 +235,8 @@ impl ResultsView {
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(text_primary())
                             .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
                             .child(name),
                     )
                     .child(
@@ -234,6 +244,8 @@ impl ResultsView {
                             .text_size(px(11.))
                             .text_color(text_secondary())
                             .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
                             .child(path),
                     ),
             )
@@ -341,12 +353,16 @@ impl Render for ResultsView {
             .flex()
             .flex_col()
             .on_mouse_move(cx.listener(|this, _, _, cx| {
-                this.hover_index = None;
-                cx.notify();
+                if this.hover_index.is_some() {
+                    this.hover_index = None;
+                    cx.notify();
+                }
             }))
             .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                this.hover_index = None;
-                cx.notify();
+                if this.hover_index.is_some() {
+                    this.hover_index = None;
+                    cx.notify();
+                }
             }))
             .when(has_results, |this: Div| {
                 this.child(self.render_header()).child(
