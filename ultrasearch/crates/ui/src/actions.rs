@@ -24,6 +24,8 @@ actions!(
         RestartToUpdate,
         ToggleUpdateOptIn,
         HotkeyConflictGeneral,
-        HotkeyConflictPowerToys
+        HotkeyConflictPowerToys,
+        ToggleShortcuts,
+        CloseShortcuts
     ]
 );

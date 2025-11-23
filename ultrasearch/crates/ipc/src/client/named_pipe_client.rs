@@ -4,7 +4,7 @@ use crate::{
     ReloadConfigRequest, ReloadConfigResponse, SearchRequest, SearchResponse, StatusRequest,
     StatusResponse, framing,
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::windows::named_pipe::ClientOptions;
@@ -14,8 +14,8 @@ use tracing::warn;
 const DEFAULT_PIPE_NAME: &str = r#"\\.\pipe\ultrasearch"#;
 const MAX_MESSAGE_BYTES: usize = 256 * 1024;
 const DEFAULT_TIMEOUT_MS: u64 = 750;
-const DEFAULT_RETRIES: u32 = 2;
-const DEFAULT_BACKOFF_MS: u64 = 50;
+const DEFAULT_RETRIES: u32 = 5;
+const DEFAULT_BACKOFF_MS: u64 = 100;
 
 /// Named-pipe IPC client for UltraSearch.
 #[derive(Debug, Clone)]
@@ -88,13 +88,17 @@ impl PipeClient {
         let mut last_err: Option<anyhow::Error> = None;
 
         while attempt <= self.retries {
-            let fut = async {
-                let mut conn = ClientOptions::new()
-                    .open(&self.pipe_name)
-                    .with_context(|| format!("connect to pipe {}", self.pipe_name))?;
+            let frame = framed.clone();
+            let fut = async move {
+                // Return anyhow::Result to simplify error handling.
+                // Connect (new pipe each attempt)
+                let mut conn = match ClientOptions::new().open(&self.pipe_name) {
+                    Ok(c) => c,
+                    Err(e) => return Err(anyhow::Error::new(e)),
+                };
 
                 // Write the framed request
-                conn.write_all(&framed).await?;
+                conn.write_all(&frame).await?;
 
                 // Read response header
                 let mut len_buf = [0u8; 4];
@@ -120,8 +124,29 @@ impl PipeClient {
             match tokio::time::timeout(self.request_timeout, fut).await {
                 Ok(Ok(resp)) => return Ok(resp),
                 Ok(Err(e)) => {
-                    warn!("pipe request attempt {} failed: {e:?}", attempt + 1);
-                    last_err = Some(e);
+                    // Common reconnect cases: pipe missing (service down) or busy.
+                    if let Some(code) = e
+                        .downcast_ref::<std::io::Error>()
+                        .and_then(|ioe| ioe.raw_os_error())
+                    {
+                        if code == 2 || code == 231 {
+                            // 2 = ERROR_FILE_NOT_FOUND (service not up yet)
+                            // 231 = ERROR_PIPE_BUSY (connecting during service restart)
+                            warn!(
+                                "pipe request attempt {}: service unavailable/busy (os err {})",
+                                attempt + 1,
+                                code
+                            );
+                            last_err = Some(e);
+                            // Continue loop with backoff.
+                        } else {
+                            warn!("pipe request attempt {} failed: {e:?}", attempt + 1);
+                            last_err = Some(e);
+                        }
+                    } else {
+                        warn!("pipe request attempt {} failed: {e:?}", attempt + 1);
+                        last_err = Some(e);
+                    }
                 }
                 Err(e) => {
                     warn!("pipe request attempt {} timed out: {e:?}", attempt + 1);
@@ -132,10 +157,17 @@ impl PipeClient {
 
             attempt += 1;
             if attempt <= self.retries {
+                // Apply linear backoff; bump to exponential if needed.
                 sleep(self.backoff * attempt.min(10)).await;
             }
         }
 
-        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("request failed")))
+        Err(last_err.unwrap_or_else(|| {
+            anyhow::anyhow!(
+                "request failed after {} attempts to {}",
+                self.retries + 1,
+                self.pipe_name
+            )
+        }))
     }
 }

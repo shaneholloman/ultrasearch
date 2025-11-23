@@ -93,6 +93,7 @@ pub struct SearchAppModel {
     pub updates: UpdateState,
     pub hotkey_conflict: Option<String>,
     pub history: VecDeque<String>,
+    pub show_shortcuts: bool,
     pub client: IpcClient,
     pub search_debounce: Option<Task<()>>,
     pub status_task: Option<Task<()>>,
@@ -115,6 +116,7 @@ impl SearchAppModel {
             updates: UpdateState::default(),
             hotkey_conflict: None,
             history: VecDeque::new(),
+            show_shortcuts: false,
             client,
             search_debounce: None,
             status_task: None,
@@ -193,7 +195,9 @@ impl SearchAppModel {
         let offline = !self.status.connected;
         let update_available = matches!(
             self.updates.status,
-            UpdateStatus::Available { .. } | UpdateStatus::ReadyToRestart { .. }
+            UpdateStatus::Available { .. }
+                | UpdateStatus::Downloading { .. }
+                | UpdateStatus::ReadyToRestart { .. }
         );
         set_tray_status(TrayState {
             indexing,
@@ -403,16 +407,19 @@ impl SearchAppModel {
 
     pub fn set_update_opt_in(&mut self, opt_in: bool, cx: &mut Context<SearchAppModel>) {
         self.updates.opt_in = opt_in;
+        self.update_tray_status();
         cx.notify();
     }
 
     pub fn check_for_updates(&mut self, cx: &mut Context<SearchAppModel>) {
         if !self.updates.opt_in {
             self.updates.status = UpdateStatus::NeedsOptIn;
+            self.update_tray_status();
             cx.notify();
             return;
         }
         self.updates.status = UpdateStatus::Checking;
+        self.update_tray_status();
         cx.notify();
         let client = self.client.clone();
         cx.spawn(|this: WeakEntity<SearchAppModel>, cx: &mut AsyncApp| {
@@ -428,6 +435,7 @@ impl SearchAppModel {
                             version: fake_version.clone(),
                             notes: fake_notes.clone(),
                         };
+                        model.update_tray_status();
                         cx.notify();
                     })
                 });
@@ -445,6 +453,7 @@ impl SearchAppModel {
             version: version.clone(),
             progress: 0,
         };
+        self.update_tray_status();
         cx.notify();
         cx.spawn(|this: WeakEntity<SearchAppModel>, cx: &mut AsyncApp| {
             let async_app = cx.clone();
@@ -461,6 +470,7 @@ impl SearchAppModel {
                                     version: version.clone(),
                                     progress,
                                 };
+                                model.update_tray_status();
                                 cx.notify();
                             }
                         })
@@ -481,6 +491,7 @@ impl SearchAppModel {
                             version: ver,
                             notes,
                         };
+                        model.update_tray_status();
                         cx.notify();
                     })
                 });
@@ -494,6 +505,7 @@ impl SearchAppModel {
             return;
         }
         self.updates.status = UpdateStatus::Restarting;
+        self.update_tray_status();
         cx.notify();
         cx.spawn(|this: WeakEntity<SearchAppModel>, cx: &mut AsyncApp| {
             let async_app = cx.clone();
@@ -502,6 +514,7 @@ impl SearchAppModel {
                 let _ = async_app.update(|app| {
                     this.update(app, |model, cx| {
                         model.updates.status = UpdateStatus::Idle;
+                        model.update_tray_status();
                         cx.notify();
                     })
                 });

@@ -1,4 +1,5 @@
 pub mod context_menu;
+pub mod help_panel;
 pub mod onboarding;
 pub mod preview_view;
 pub mod quick_search;

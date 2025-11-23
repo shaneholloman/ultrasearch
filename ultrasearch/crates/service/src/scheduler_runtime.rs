@@ -238,6 +238,46 @@ pub fn enqueue_content_job(job: JobSpec) -> bool {
     }
 }
 
+/// Utility to let other components set active worker count directly (e.g., worker manager updates).
+pub fn set_live_active_workers(active: u32) {
+    let live = LIVE_STATE.get_or_init(SchedulerLiveState::default);
+    live.active_workers.store(active, Ordering::Relaxed);
+}
+
+/// Utility to set live queue counts directly (for external schedulers/testing).
+pub fn set_live_queue_counts(critical: usize, metadata: usize, content: usize) {
+    let live = LIVE_STATE.get_or_init(SchedulerLiveState::default);
+    live.critical.store(critical, Ordering::Relaxed);
+    live.metadata.store(metadata, Ordering::Relaxed);
+    live.content.store(content, Ordering::Relaxed);
+}
+
+/// Convert a `FileMeta` into a `JobSpec` if it looks indexable.
+pub fn content_job_from_meta(meta: &FileMeta, extract: &ExtractSection) -> Option<JobSpec> {
+    if meta.flags.is_dir() {
+        return None;
+    }
+    let path_str = meta.path.as_ref()?;
+    let path = PathBuf::from(path_str);
+    let file_id = meta.key.file_id();
+
+    let to_usize = |v: u64| -> usize {
+        if v > usize::MAX as u64 {
+            usize::MAX
+        } else {
+            v as usize
+        }
+    };
+
+    Some(JobSpec {
+        volume_id: meta.volume,
+        file_id,
+        path,
+        max_bytes: Some(to_usize(extract.max_bytes_per_file)),
+        max_chars: Some(to_usize(extract.max_chars_per_file)),
+    })
+}
+
 #[cfg(test)]
 pub fn live_counters() -> (usize, usize) {
     let live = LIVE_STATE.get_or_init(SchedulerLiveState::default);
@@ -284,44 +324,4 @@ mod tests {
         let after = live_counters().0;
         assert_eq!(after, before + 1, "enqueued counter should increase");
     }
-}
-
-/// Utility to let other components set active worker count directly (e.g., worker manager updates).
-pub fn set_live_active_workers(active: u32) {
-    let live = LIVE_STATE.get_or_init(SchedulerLiveState::default);
-    live.active_workers.store(active, Ordering::Relaxed);
-}
-
-/// Utility to set live queue counts directly (for external schedulers/testing).
-pub fn set_live_queue_counts(critical: usize, metadata: usize, content: usize) {
-    let live = LIVE_STATE.get_or_init(SchedulerLiveState::default);
-    live.critical.store(critical, Ordering::Relaxed);
-    live.metadata.store(metadata, Ordering::Relaxed);
-    live.content.store(content, Ordering::Relaxed);
-}
-
-/// Convert a `FileMeta` into a `JobSpec` if it looks indexable.
-pub fn content_job_from_meta(meta: &FileMeta, extract: &ExtractSection) -> Option<JobSpec> {
-    if meta.flags.is_dir() {
-        return None;
-    }
-    let path_str = meta.path.as_ref()?;
-    let path = PathBuf::from(path_str);
-    let file_id = meta.key.file_id();
-
-    let to_usize = |v: u64| -> usize {
-        if v > usize::MAX as u64 {
-            usize::MAX
-        } else {
-            v as usize
-        }
-    };
-
-    Some(JobSpec {
-        volume_id: meta.volume,
-        file_id,
-        path,
-        max_bytes: Some(to_usize(extract.max_bytes_per_file)),
-        max_chars: Some(to_usize(extract.max_chars_per_file)),
-    })
 }

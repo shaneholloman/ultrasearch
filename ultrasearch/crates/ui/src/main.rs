@@ -6,10 +6,12 @@
 
 use gpui::prelude::*;
 use gpui::{App, AppContext, AsyncApp, KeyBinding, *};
+use ui::actions::{CloseShortcuts, ToggleShortcuts};
 use ui::globals::GlobalAppState;
 use ui::icon_cache::IconCache;
 use ui::model::state::{BackendMode, SearchAppModel};
 use ui::theme::{self, Theme};
+use ui::views::help_panel::HelpPanel;
 use ui::views::onboarding::OnboardingView;
 use ui::views::preview_view::PreviewView;
 use ui::views::quick_search::QuickBarView;
@@ -27,6 +29,7 @@ struct UltraSearchWindow {
     preview_view: Entity<PreviewView>,
     onboarding_view: Entity<OnboardingView>,
     update_panel: Entity<UpdatePanel>,
+    help_panel: Entity<HelpPanel>,
     focus_handle: FocusHandle,
 }
 
@@ -44,6 +47,7 @@ impl UltraSearchWindow {
         let preview_view = cx.new(|cx| PreviewView::new(model.clone(), cx));
         let onboarding_view = cx.new(|cx| OnboardingView::new(model.clone(), cx));
         let update_panel = cx.new(|cx| UpdatePanel::new(model.clone(), cx));
+        let help_panel = cx.new(HelpPanel::new);
 
         let focus_handle = cx.focus_handle();
 
@@ -54,6 +58,7 @@ impl UltraSearchWindow {
             preview_view,
             onboarding_view,
             update_panel,
+            help_panel,
             focus_handle,
         }
     }
@@ -97,6 +102,30 @@ impl UltraSearchWindow {
         self.model.update(cx, |model, cx| {
             let new_val = !model.updates.opt_in;
             model.set_update_opt_in(new_val, cx);
+        });
+    }
+
+    fn on_toggle_shortcuts(
+        &mut self,
+        _: &ToggleShortcuts,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.model.update(cx, |model, cx| {
+            model.show_shortcuts = !model.show_shortcuts;
+            cx.notify();
+        });
+    }
+
+    fn on_close_shortcuts(
+        &mut self,
+        _: &CloseShortcuts,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.model.update(cx, |model, cx| {
+            model.show_shortcuts = false;
+            cx.notify();
         });
     }
 
@@ -328,6 +357,7 @@ impl Render for UltraSearchWindow {
         let read = self.model.read(cx);
         let show_onboarding = read.show_onboarding;
         let conflict = read.hotkey_conflict.clone();
+        let show_shortcuts = read.show_shortcuts;
 
         div()
             .track_focus(&self.focus_handle)
@@ -352,6 +382,8 @@ impl Render for UltraSearchWindow {
             .on_action(cx.listener(Self::on_show_properties))
             .on_action(cx.listener(Self::on_hotkey_conflict_general))
             .on_action(cx.listener(Self::on_hotkey_conflict_powertoys))
+            .on_action(cx.listener(Self::on_toggle_shortcuts))
+            .on_action(cx.listener(Self::on_close_shortcuts))
             .size_full()
             .flex()
             .flex_col()
@@ -363,7 +395,29 @@ impl Render for UltraSearchWindow {
                 div()
                     .flex_shrink_0()
                     .child(self.update_panel.clone())
-                    .child(self.search_view.clone()),
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(self.search_view.clone())
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(colors.text_secondary)
+                                    .cursor_pointer()
+                                    .child("Help")
+                                    .on_mouse_down(
+                                        MouseButton::Left,
+                                        cx.listener(|this, _, _, cx| {
+                                            this.model.update(cx, |m, cx| {
+                                                m.show_shortcuts = true;
+                                                cx.notify();
+                                            });
+                                        }),
+                                    ),
+                            ),
+                    ),
             )
             .child(
                 // Main content area - flexible height
@@ -401,6 +455,10 @@ impl Render for UltraSearchWindow {
                         .bg(hsla(0.0, 0.0, 0.0, 0.5)) // Dim background
                         .child(self.onboarding_view.clone()),
                 )
+            })
+            // Shortcut overlay
+            .when(show_shortcuts, |this| {
+                this.child(self.help_panel.clone())
             })
             .when(conflict.is_some(), |this| {
                 let msg = conflict
@@ -604,6 +662,9 @@ fn main() {
         cx.bind_keys([
             KeyBinding::new("cmd-k", FocusSearch, None),
             KeyBinding::new("ctrl-k", FocusSearch, None),
+            KeyBinding::new("f1", ToggleShortcuts, None),
+            KeyBinding::new("ctrl-/", ToggleShortcuts, None),
+            KeyBinding::new("cmd-/", ToggleShortcuts, None),
             KeyBinding::new("escape", ClearSearch, None),
             KeyBinding::new("enter", SubmitSearch, None),
             KeyBinding::new("down", SelectNext, None),

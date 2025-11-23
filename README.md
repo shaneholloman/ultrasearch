@@ -7,6 +7,17 @@
 
 > **A high-performance, memory-efficient desktop search engine for Windows that combines NTFS MFT enumeration with full-text content indexing. Built entirely in Rust, UltraSearch provides Everything-style instant filename search alongside deep content search capabilities, all while maintaining a minimal memory footprint through careful architectural decisions.**
 
+## What's new (UI/UX highlights)
+
+- **Spotlight-style Quick Search** (Alt+Space): floating palette with recent history, keyboard navigation, and inline query highlighting in results.
+- **Keyboard Shortcuts overlay / Help panel** (F1 or Ctrl+/ / Cmd+/): grouped cheatsheet, tray/update tips, closes on Esc or click-out; also available via the header "Help" chip.
+- **Tray awareness**: tooltip reflects Idle / Indexing / Update available / Offline; update panel supports opt-in, check/download/restart flow with release notes.
+- **GraalVM guard for Extractous**: `content-extractor` build.rs enforces GraalVM CE 23.x when `extractous_backend` is enabled; setup instructions in `docs/GRAALVM_SETUP.md`.
+- **IPC self-healing**: named-pipe client retries with backoff, handling service restarts and pipe-busy states gracefully.
+- **Status metrics**: queue depth, active workers, and content jobs enqueued/dropped surfaced in status/metrics responses.
+
+See `docs/FEATURES.md` for a concise feature reference and setup links.
+
 UltraSearch represents a fundamental rethinking of desktop search architecture. Rather than treating search as a monolithic application, it decomposes the problem into specialized components that work together seamlessly: a lightweight always-on service for metadata queries, isolated worker processes for resource-intensive content extraction, and a modern GPU-accelerated UI that feels instant.
 
 ## Purpose and Motivation
