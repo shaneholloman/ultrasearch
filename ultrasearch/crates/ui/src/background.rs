@@ -74,7 +74,6 @@ pub fn spawn() -> Result<Receiver<UserAction>> {
         let restart_id = restart_item.id().clone();
         let quit_id = quit_item.id().clone();
         let hotkey_id = hotkey.id();
-
         thread::spawn(move || {
             let menu_rx = muda::MenuEvent::receiver();
             let tray_rx = TrayIconEvent::receiver();

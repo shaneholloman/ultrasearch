@@ -4,6 +4,7 @@ use ipc::{
     MetricsSnapshot, QueryExpr, SearchHit, SearchMode, SearchRequest, StatusRequest, TermExpr,
     TermModifier, VolumeStatus,
 };
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -90,6 +91,7 @@ pub struct SearchAppModel {
     pub page: usize,
     pub updates: UpdateState,
     pub hotkey_conflict: Option<String>,
+    pub history: VecDeque<String>,
     pub client: IpcClient,
     pub search_debounce: Option<Task<()>>,
     pub status_task: Option<Task<()>>,
@@ -111,6 +113,7 @@ impl SearchAppModel {
             page: 0,
             updates: UpdateState::default(),
             hotkey_conflict: None,
+            history: VecDeque::new(),
             client,
             search_debounce: None,
             status_task: None,
@@ -483,6 +486,23 @@ impl SearchAppModel {
             }
         })
         .detach();
+    }
+
+    pub fn push_history(&mut self, query: &str) {
+        let trimmed = query.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        if let Some(front) = self.history.front() {
+            if front == trimmed {
+                return;
+            }
+        }
+        self.history.push_front(trimmed.to_string());
+        const MAX_HISTORY: usize = 10;
+        if self.history.len() > MAX_HISTORY {
+            self.history.pop_back();
+        }
     }
 }
 

@@ -502,4 +502,30 @@ mod tests {
             }
         ));
     }
+
+    #[cfg(feature = "extractous_backend")]
+    #[test]
+    fn extractous_smoke_if_graal_present() {
+        // Only attempt when env is set to avoid failing in CI without GraalVM.
+        if std::env::var("GRAALVM_HOME").is_err() && std::env::var("JAVA_HOME").is_err() {
+            eprintln!("skipping extractous smoke: GRAALVM_HOME/JAVA_HOME not set");
+            return;
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("note.txt");
+        std::fs::write(&path, b"hello extractous").unwrap();
+
+        let ctx = ExtractContext {
+            path: path.to_str().unwrap(),
+            max_bytes: 1024,
+            max_chars: 2048,
+            ext_hint: Some("txt"),
+            mime_hint: None,
+        };
+
+        let extractor = ExtractousExtractor::new();
+        assert!(extractor.supports(&ctx));
+        // We don't call extract() to avoid requiring the full Graal runtime during tests.
+    }
 }

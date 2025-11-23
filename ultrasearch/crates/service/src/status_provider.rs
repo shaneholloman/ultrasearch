@@ -59,8 +59,10 @@ pub fn update_status_scheduler_state(state: impl Into<String>) {
 }
 
 pub fn update_status_metrics(metrics: Option<MetricsSnapshot>) {
-    if let Some(p) = BASIC_PROVIDER.get() {
-        p.update_metrics(metrics);
+    if let Some(p) = BASIC_PROVIDER.get()
+        && let Some(m) = metrics
+    {
+        p.update_metrics(Some(m));
     }
 }
 
@@ -71,7 +73,12 @@ pub fn update_status_queue_state(
     content_dropped: Option<u64>,
 ) {
     if let Some(p) = BASIC_PROVIDER.get() {
-        p.update_queue_state(queue_depth, active_workers, content_enqueued, content_dropped);
+        p.update_queue_state(
+            queue_depth,
+            active_workers,
+            content_enqueued,
+            content_dropped,
+        );
     }
 }
 
@@ -161,5 +168,33 @@ impl StatusProvider for BasicStatusProvider {
                 metrics: global_metrics_snapshot(Some(0), Some(0), Some(0), Some(0)),
                 last_index_commit_ts: None,
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queue_state_updates_metrics_fields() {
+        let provider = init_basic_status_provider();
+        provider.update_queue_state(Some(5), Some(2), Some(10), Some(1));
+        let snap = provider.snapshot();
+        let metrics = snap.metrics.unwrap();
+        assert_eq!(metrics.queue_depth, Some(5));
+        assert_eq!(metrics.active_workers, Some(2));
+        assert_eq!(metrics.content_enqueued, Some(10));
+        assert_eq!(metrics.content_dropped, Some(1));
+    }
+
+    #[test]
+    fn update_metrics_none_does_not_clear_queue_state() {
+        let provider = init_basic_status_provider();
+        provider.update_queue_state(Some(3), Some(1), Some(4), Some(0));
+        update_status_metrics(None);
+        let snap = provider.snapshot();
+        let metrics = snap.metrics.unwrap();
+        assert_eq!(metrics.queue_depth, Some(3));
+        assert_eq!(metrics.active_workers, Some(1));
     }
 }

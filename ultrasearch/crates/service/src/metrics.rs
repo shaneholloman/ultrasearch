@@ -153,8 +153,12 @@ pub fn global_metrics_snapshot(
     content_dropped: Option<u64>,
 ) -> Option<MetricsSnapshot> {
     with_global_metrics(|m| {
-        let snap =
-            m.snapshot_with_queue_state(queue_depth, active_workers, content_enqueued, content_dropped);
+        let snap = m.snapshot_with_queue_state(
+            queue_depth,
+            active_workers,
+            content_enqueued,
+            content_dropped,
+        );
         MetricsSnapshot {
             search_latency_ms_p50: snap.search_latency_ms_p50,
             search_latency_ms_p95: snap.search_latency_ms_p95,
@@ -208,9 +212,11 @@ mod tests {
     #[test]
     fn snapshot_with_queue_state_sets_fields() {
         let metrics = ServiceMetrics::new(&MetricsSection::default()).unwrap();
-        let snap = metrics.snapshot_with_queue_state(Some(3), Some(2));
+        let snap = metrics.snapshot_with_queue_state(Some(3), Some(2), Some(7), Some(1));
         assert_eq!(snap.queue_depth, Some(3));
         assert_eq!(snap.active_workers, Some(2));
+        assert_eq!(snap.content_enqueued, Some(7));
+        assert_eq!(snap.content_dropped, Some(1));
     }
 
     #[test]

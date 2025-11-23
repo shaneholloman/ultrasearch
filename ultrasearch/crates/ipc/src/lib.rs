@@ -389,11 +389,15 @@ mod tests {
             worker_mem_bytes: Some(1024),
             queue_depth: Some(5),
             active_workers: Some(2),
+            content_enqueued: Some(9),
+            content_dropped: Some(1),
         };
         let bytes = ser(&m);
         let back: MetricsSnapshot = de(&bytes);
         assert_eq!(back.queue_depth, Some(5));
         assert_eq!(back.active_workers, Some(2));
+        assert_eq!(back.content_enqueued, Some(9));
+        assert_eq!(back.content_dropped, Some(1));
     }
 
     #[test]

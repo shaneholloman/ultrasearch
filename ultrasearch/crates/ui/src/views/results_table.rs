@@ -47,6 +47,98 @@ impl ResultsView {
         }
     }
 
+    fn highlight_text(
+        &self,
+        text: &str,
+        query: &str,
+        is_primary: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let colors = theme::active_colors(cx);
+        let needle = query.trim();
+        if needle.is_empty() {
+            return div()
+                .text_size(if is_primary { px(14.) } else { px(11.) })
+                .font_weight(if is_primary {
+                    FontWeight::MEDIUM
+                } else {
+                    FontWeight::NORMAL
+                })
+                .text_color(if is_primary {
+                    colors.text_primary
+                } else {
+                    colors.text_secondary
+                })
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(text.to_string())
+                .into_any_element();
+        }
+
+        let lower = text.to_ascii_lowercase();
+        let needle_lower = needle.to_ascii_lowercase();
+        if let Some(pos) = lower.find(&needle_lower) {
+            let end = pos + needle_lower.len();
+            let (pre, matched, post) = (&text[..pos], &text[pos..end], &text[end..text.len()]);
+
+            div()
+                .text_size(if is_primary { px(14.) } else { px(11.) })
+                .font_weight(if is_primary {
+                    FontWeight::MEDIUM
+                } else {
+                    FontWeight::NORMAL
+                })
+                .text_color(if is_primary {
+                    colors.text_primary
+                } else {
+                    colors.text_secondary
+                })
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(pre.to_string())
+                .child(
+                    div()
+                        .px_1()
+                        .rounded_sm()
+                        .bg(colors.match_highlight)
+                        .text_color(colors.bg)
+                        .child(matched.to_string()),
+                )
+                .child(post.to_string())
+                .into_any_element()
+        } else {
+            div()
+                .text_size(if is_primary { px(14.) } else { px(11.) })
+                .font_weight(if is_primary {
+                    FontWeight::MEDIUM
+                } else {
+                    FontWeight::NORMAL
+                })
+                .text_color(if is_primary {
+                    colors.text_primary
+                } else {
+                    colors.text_secondary
+                })
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(text.to_string())
+                .into_any_element()
+        }
+    }
+
+    fn render_highlighted(
+        &self,
+        text: &str,
+        query: &str,
+        is_primary: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        self.highlight_text(text, query, is_primary, cx)
+    }
+
     fn handle_click(&mut self, index: usize, cx: &mut Context<Self>) {
         self.model.update(cx, |model, cx| {
             let global_index = model.page_start().saturating_add(index);
@@ -234,6 +326,7 @@ impl ResultsView {
         hit: &SearchHit,
         is_selected: bool,
         is_hover: bool,
+        query: &str,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let is_even = index.is_multiple_of(2);
@@ -317,25 +410,8 @@ impl ResultsView {
                     .flex_col()
                     .gap_1()
                     .overflow_hidden()
-                    .child(
-                        div()
-                            .text_size(px(14.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(colors.text_primary)
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .child(name),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(11.))
-                            .text_color(colors.text_secondary)
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .child(path),
-                    ),
+                    .child(self.render_highlighted(&name, query, true, cx))
+                    .child(self.render_highlighted(&path, query, false, cx)),
             )
             // Score badge
             .when(score_pct > 0, |mut this: Div| {
@@ -440,6 +516,7 @@ impl Render for ResultsView {
         let has_results = !page_hits.is_empty();
         let hover_index = self.hover_index;
         let colors = theme::active_colors(cx);
+        let query = model_read.query.clone();
 
         div()
             .size_full()
@@ -472,7 +549,7 @@ impl Render for ResultsView {
                             };
 
                             let is_hover = hover_index == Some(ix);
-                            this.render_row(start + ix, &hit, is_selected, is_hover, cx)
+                            this.render_row(start + ix, &hit, is_selected, is_hover, &query, cx)
                         }),
                     )
                     .size_full(),
