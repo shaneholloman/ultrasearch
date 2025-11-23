@@ -3,6 +3,7 @@ use crate::theme;
 use chrono::{DateTime, Local};
 use gpui::prelude::FluentBuilder;
 use gpui::*;
+use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 /// Full-screen overlay that provides a rich help + shortcuts experience.
 pub struct HelpPanel {
@@ -136,6 +137,125 @@ impl Render for HelpPanel {
                 )
         };
 
+        let render_markdown = |text: &str| {
+            let mut opts = Options::empty();
+            opts.insert(Options::ENABLE_STRIKETHROUGH);
+            opts.insert(Options::ENABLE_TABLES);
+            let parser = Parser::new_ext(text, opts);
+
+            #[derive(Clone, Copy)]
+            enum Block {
+                H1,
+                H2,
+                H3,
+                Paragraph,
+                Item,
+                Link,
+            }
+
+            let mut current: Option<(Block, String)> = None;
+            let mut nodes: Vec<Div> = Vec::new();
+
+            let flush = |current: &mut Option<(Block, String)>, nodes: &mut Vec<Div>| {
+                if let Some((kind, buf)) = current.take() {
+                    let content = buf.trim();
+                    if content.is_empty() {
+                        return;
+                    }
+                    let node = match kind {
+                        Block::H1 => div()
+                            .text_size(px(15.))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(colors.text_primary)
+                            .child(content.to_string()),
+                        Block::H2 => div()
+                            .text_size(px(14.))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(colors.text_primary)
+                            .child(content.to_string()),
+                        Block::H3 => div()
+                            .text_size(px(13.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(colors.text_primary)
+                            .child(content.to_string()),
+                        Block::Paragraph => div()
+                            .text_size(px(12.))
+                            .text_color(colors.text_secondary)
+                            .child(content.to_string()),
+                        Block::Item => div()
+                            .flex()
+                            .gap_2()
+                            .text_size(px(12.))
+                            .text_color(colors.text_primary)
+                            .child("•")
+                            .child(content.to_string()),
+                        Block::Link => div()
+                            .text_size(px(12.))
+                            .text_color(colors.match_highlight)
+                            .child(content.to_string()),
+                    };
+                    nodes.push(node);
+                }
+            };
+
+            for ev in parser {
+                match ev {
+                    Event::Start(Tag::Heading { level, .. }) => {
+                        flush(&mut current, &mut nodes);
+                        let block = match level {
+                            HeadingLevel::H1 => Block::H1,
+                            HeadingLevel::H2 => Block::H2,
+                            _ => Block::H3,
+                        };
+                        current = Some((block, String::new()));
+                    }
+                    Event::End(TagEnd::Heading { .. }) => {
+                        flush(&mut current, &mut nodes);
+                    }
+                    Event::Start(Tag::Paragraph) => {
+                        flush(&mut current, &mut nodes);
+                        current = Some((Block::Paragraph, String::new()));
+                    }
+                    Event::End(TagEnd::Paragraph) => {
+                        flush(&mut current, &mut nodes);
+                    }
+                    Event::Start(Tag::Item) => {
+                        flush(&mut current, &mut nodes);
+                        current = Some((Block::Item, String::new()));
+                    }
+                    Event::End(TagEnd::Item) => {
+                        flush(&mut current, &mut nodes);
+                    }
+                    Event::Start(Tag::Link { dest_url, .. }) => {
+                        flush(&mut current, &mut nodes);
+                        current = Some((Block::Link, dest_url.to_string()));
+                    }
+                    Event::End(TagEnd::Link { .. }) => {
+                        flush(&mut current, &mut nodes);
+                    }
+                    Event::Text(text) => {
+                        if let Some((_, ref mut buf)) = current {
+                            buf.push_str(&text);
+                        }
+                    }
+                    Event::Code(code) => {
+                        if let Some((_, ref mut buf)) = current {
+                            buf.push_str(&format!("`{code}`"));
+                        }
+                    }
+                    Event::SoftBreak | Event::HardBreak => {
+                        if let Some((_, ref mut buf)) = current {
+                            buf.push(' ');
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            flush(&mut current, &mut nodes);
+
+            div().flex().flex_col().gap_1().children(nodes)
+        };
+
         let sections: Vec<Div> = [
             Self::section(
                 "Navigation",
@@ -175,47 +295,6 @@ impl Render for HelpPanel {
         .collect();
 
         let no_results = sections.is_empty() && !self.filter.trim().is_empty();
-
-        let render_markdown = |text: &str| {
-            let mut nodes: Vec<Div> = Vec::new();
-            for line in text.lines() {
-                if let Some(stripped) = line.strip_prefix("# ") {
-                    nodes.push(
-                        div()
-                            .text_size(px(15.))
-                            .font_weight(FontWeight::BOLD)
-                            .text_color(colors.text_primary)
-                            .child(stripped.trim().to_owned()),
-                    );
-                } else if let Some(stripped) = line.strip_prefix("## ") {
-                    nodes.push(
-                        div()
-                            .text_size(px(14.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(colors.text_primary)
-                            .child(stripped.trim().to_owned()),
-                    );
-                } else if let Some(stripped) = line.strip_prefix("- ") {
-                    nodes.push(
-                        div()
-                            .flex()
-                            .gap_2()
-                            .text_size(px(12.))
-                            .text_color(colors.text_primary)
-                            .child("•")
-                            .child(stripped.trim().to_owned()),
-                    );
-                } else {
-                    nodes.push(
-                        div()
-                            .text_size(px(12.))
-                            .text_color(colors.text_secondary)
-                            .child(line.to_owned()),
-                    );
-                }
-            }
-            nodes
-        };
 
         let filter_input = div()
             .track_focus(&self.filter_focus)
@@ -380,10 +459,7 @@ impl Render for HelpPanel {
                                     .bg(colors.bg)
                                     .border_1()
                                     .border_color(colors.border)
-                                    .flex()
-                                    .flex_col()
-                                    .gap_1()
-                                    .children(render_markdown(
+                                    .child(render_markdown(
                                         self.docs
                                             .as_deref()
                                             .unwrap_or("docs/FEATURES.md not found."),
@@ -404,7 +480,7 @@ impl Render for HelpPanel {
                             ))
                             .child(callout(
                                 "Alt+Space conflict",
-                                "If Alt+Space won’t register, PowerToys Run or another launcher may own it. Rebind there or configure an alternate quick-search hotkey.",
+                                "If Alt+Space won't register, PowerToys Run or another launcher may own it. Rebind there or configure an alternate quick-search hotkey.",
                             )),
                     ),
             )
