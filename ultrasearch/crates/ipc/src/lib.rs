@@ -242,6 +242,18 @@ pub struct StatusRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReloadConfigRequest {
+    pub id: Uuid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReloadConfigResponse {
+    pub id: Uuid,
+    pub success: bool,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VolumeStatus {
     pub volume: u16,
     pub indexed_files: u64,

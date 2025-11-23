@@ -27,6 +27,8 @@ pub struct AppConfig {
     pub extract: ExtractSection,
     #[serde(default)]
     pub semantic: SemanticSection,
+    #[serde(default)]
+    pub volumes: Vec<String>,
 }
 
 /// Load config, creating a default config file if none exists at the target path.
@@ -60,6 +62,7 @@ impl Default for AppConfig {
             paths: PathsSection::default(),
             extract: ExtractSection::default(),
             semantic: SemanticSection::default(),
+            volumes: Vec::new(),
         }
     }
 }
@@ -391,6 +394,11 @@ fn default_semantic_index_dir() -> String {
 }
 
 static CONFIG: Lazy<RwLock<AppConfig>> = Lazy::new(|| RwLock::new(AppConfig::default()));
+
+/// Get a clone of the currently loaded configuration.
+pub fn get_current_config() -> AppConfig {
+    CONFIG.read().expect("config lock poisoned").clone()
+}
 
 /// Load configuration from .env and a TOML file (default: `config/config.toml`).
 ///

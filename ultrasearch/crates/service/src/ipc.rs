@@ -8,7 +8,10 @@ use crate::search_handler::search;
 use crate::status::make_status_response;
 use crate::status_provider::status_snapshot;
 use anyhow::Result;
-use ipc::{MetricsSnapshot, SearchRequest, StatusRequest, framing};
+use ipc::{
+    framing, MetricsSnapshot, ReloadConfigRequest, ReloadConfigResponse, SearchRequest,
+    StatusRequest,
+};
 #[cfg(test)]
 use ipc::{SearchResponse, StatusResponse};
 use std::io::Cursor;
@@ -211,6 +214,25 @@ fn dispatch(payload: &[u8]) -> Vec<u8> {
         record_ipc_request(started.elapsed());
         return encoded;
     }
+
+    // Handle ReloadConfigRequest
+    if let Some(req) = deserialize_exact::<ReloadConfigRequest>(payload) {
+        let started = Instant::now();
+        let result = core_types::config::reload_config(None);
+        let (success, message) = match result {
+            Ok(_) => (true, None),
+            Err(e) => (false, Some(e.to_string())),
+        };
+        let resp = ReloadConfigResponse {
+            id: req.id,
+            success,
+            message,
+        };
+        let encoded = bincode::serialize(&resp).unwrap_or_default();
+        record_ipc_request(started.elapsed());
+        return encoded;
+    }
+
     // Fallback: dispatch SearchRequest.
     if let Some(req) = deserialize_exact::<SearchRequest>(payload) {
         let start = Instant::now();

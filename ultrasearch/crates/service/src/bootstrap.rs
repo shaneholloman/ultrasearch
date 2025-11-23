@@ -7,7 +7,6 @@ use std::{
 use anyhow::Result;
 use core_types::config::AppConfig;
 use ipc::VolumeStatus;
-use ntfs_watcher::{NtfsError, discover_volumes, enumerate_mft};
 use tokio::sync::mpsc;
 
 #[derive(Debug, Clone, Default)]
@@ -24,6 +23,7 @@ use crate::{
     init_tracing_with_config,
     meta_ingest::ingest_with_paths,
     metrics::{init_metrics_from_config, set_global_metrics},
+    scanner::scan_volumes,
     scheduler_runtime::SchedulerRuntime,
     search_handler::set_search_handler,
     status_provider::{
@@ -61,7 +61,7 @@ pub fn run_app_with_options(
         None if opts.skip_initial_ingest => {
             tracing::info!("skip_initial_ingest=true; leaving indices empty");
         }
-        None => run_initial_metadata_ingest(cfg)?,
+        None => scan_volumes(cfg)?,
     }
 
     // Start scheduler loop
@@ -166,80 +166,6 @@ fn ingest_seed_metadata(cfg: &AppConfig, metas: Vec<core_types::FileMeta>) -> Re
 
     update_status_last_commit(Some(unix_timestamp_secs()));
     update_status_volumes(status);
-    Ok(())
-}
-
-fn run_initial_metadata_ingest(cfg: &AppConfig) -> Result<()> {
-    tracing::info!("Starting initial metadata ingest...");
-    let volumes = match discover_volumes() {
-        Ok(v) if v.is_empty() => {
-            tracing::info!("no NTFS volumes discovered; skipping initial metadata ingest");
-            return Ok(());
-        }
-        Ok(v) => {
-            tracing::info!("Discovered {} NTFS volumes.", v.len());
-            v
-        }
-        Err(NtfsError::NotSupported) => {
-            tracing::info!("platform does not support NTFS watcher; skipping metadata ingest");
-            return Ok(());
-        }
-        Err(err) => {
-            tracing::warn!(error = %err, "failed to discover volumes; skipping metadata ingest");
-            return Ok(());
-        }
-    };
-
-    let mut status = Vec::with_capacity(volumes.len());
-
-    for volume in volumes {
-        tracing::info!(guid = %volume.guid_path, letters = ?volume.drive_letters, "enumerating MFT for volume");
-        match enumerate_mft(&volume) {
-            Ok(metas) => {
-                if metas.is_empty() {
-                    tracing::info!(guid = %volume.guid_path, "no entries found during MFT enumeration");
-                    continue;
-                }
-
-                let count = metas.len() as u64;
-                tracing::info!(guid = %volume.guid_path, files = count, "ingesting metadata batch into meta-index");
-                match ingest_with_paths(&cfg.paths, metas, None) {
-                    Ok(_) => tracing::info!("Successfully ingested {} files.", count),
-                    Err(e) => tracing::error!("Failed to ingest files: {}", e),
-                }
-
-                status.push(VolumeStatus {
-                    volume: volume.id,
-                    indexed_files: count,
-                    pending_files: 0,
-                    last_usn: None,
-                    journal_id: None,
-                });
-
-                update_status_last_commit(Some(unix_timestamp_secs()));
-            }
-            Err(err) => {
-                let msg = err.to_string();
-                if msg.contains("Access is denied") || msg.contains("privilege") {
-                    tracing::error!(
-                        guid = %volume.guid_path,
-                        "CRITICAL: Failed to enumerate MFT due to permissions. Please run the application as Administrator."
-                    );
-                } else {
-                    tracing::warn!(
-                        guid = %volume.guid_path,
-                        error = %err,
-                        "failed to enumerate MFT; skipping volume"
-                    );
-                }
-            }
-        }
-    }
-
-    if !status.is_empty() {
-        update_status_volumes(status);
-    }
-
     Ok(())
 }
 

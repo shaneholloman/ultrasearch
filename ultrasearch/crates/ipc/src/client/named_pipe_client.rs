@@ -1,7 +1,10 @@
 #![cfg(target_os = "windows")]
 
-use crate::{SearchRequest, SearchResponse, StatusRequest, StatusResponse, framing};
-use anyhow::{Context, Result, bail};
+use crate::{
+    framing, ReloadConfigRequest, ReloadConfigResponse, SearchRequest, SearchResponse,
+    StatusRequest, StatusResponse,
+};
+use anyhow::{bail, Context, Result};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::windows::named_pipe::ClientOptions;
@@ -64,6 +67,10 @@ impl PipeClient {
     }
 
     pub async fn search(&self, req: SearchRequest) -> Result<SearchResponse> {
+        self.request(&req).await
+    }
+
+    pub async fn reload_config(&self, req: ReloadConfigRequest) -> Result<ReloadConfigResponse> {
         self.request(&req).await
     }
 

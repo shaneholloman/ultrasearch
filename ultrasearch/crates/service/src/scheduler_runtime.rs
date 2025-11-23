@@ -1,4 +1,5 @@
 use crate::dispatcher::job_dispatch::{JobDispatcher, JobSpec};
+use crate::scanner;
 use crate::status_provider::{
     update_status_metrics, update_status_queue_state, update_status_scheduler_state,
 };
@@ -10,6 +11,7 @@ use std::collections::VecDeque;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::time::Duration;
+use tokio::task;
 
 #[derive(Debug, Default)]
 struct SchedulerLiveState {
@@ -29,6 +31,7 @@ pub struct SchedulerRuntime {
     content_jobs: VecDeque<JobSpec>,
     dispatcher: JobDispatcher,
     live: &'static SchedulerLiveState,
+    current_volumes: Vec<String>,
 }
 
 impl SchedulerRuntime {
@@ -52,7 +55,31 @@ impl SchedulerRuntime {
             dispatcher: JobDispatcher::new(app_cfg),
             config,
             live,
+            current_volumes: app_cfg.volumes.clone(),
         }
+    }
+
+    fn update_config(&mut self, app_cfg: &AppConfig) {
+        // Check for volume changes
+        if self.current_volumes != app_cfg.volumes {
+            tracing::info!("Volume configuration changed, triggering rescan...");
+            self.current_volumes = app_cfg.volumes.clone();
+            let cfg_clone = app_cfg.clone();
+            
+            // Spawn blocking task to rescan
+            task::spawn_blocking(move || {
+                if let Err(e) = scanner::scan_volumes(&cfg_clone) {
+                    tracing::error!("Failed to rescan volumes after config update: {}", e);
+                }
+            });
+        }
+
+        self.config.warm_idle = Duration::from_secs(app_cfg.scheduler.idle_warm_seconds);
+        self.config.deep_idle = Duration::from_secs(app_cfg.scheduler.idle_deep_seconds);
+        self.config.cpu_metadata_max = app_cfg.scheduler.cpu_soft_limit_pct as f32;
+        self.config.cpu_content_max = app_cfg.scheduler.cpu_hard_limit_pct as f32;
+        self.config.disk_busy_threshold_bps = app_cfg.scheduler.disk_busy_bytes_per_s;
+        self.config.content_batch_size = app_cfg.scheduler.content_batch_size as usize;
     }
 
     /// Submit a content indexing job (path + doc ids).
@@ -79,6 +106,10 @@ impl SchedulerRuntime {
     }
 
     pub async fn tick(&mut self) {
+        // Reload config dynamically (from memory cache updated by IPC)
+        let app_cfg = core_types::config::get_current_config();
+        self.update_config(&app_cfg);
+
         let idle_sample = self.idle.sample();
         let load = self.load.sample();
 

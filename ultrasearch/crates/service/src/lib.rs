@@ -8,6 +8,7 @@ pub mod meta_ingest;
 pub mod metrics;
 pub mod planner;
 pub mod priority;
+pub mod scanner;
 pub mod scheduler_runtime;
 pub mod search_handler;
 pub mod status;
