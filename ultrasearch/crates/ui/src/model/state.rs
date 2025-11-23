@@ -1,6 +1,9 @@
 use crate::ipc::client::IpcClient;
 use gpui::*;
-use ipc::{QueryExpr, SearchHit, SearchMode, SearchRequest, StatusRequest, TermExpr, TermModifier};
+use ipc::{
+    MetricsSnapshot, QueryExpr, SearchHit, SearchMode, SearchRequest, StatusRequest, TermExpr,
+    TermModifier, VolumeStatus,
+};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -30,6 +33,9 @@ pub struct SearchStatus {
     pub in_flight: bool,
     pub backend_mode: BackendMode,
     pub indexing_state: String,
+    pub volumes: Vec<VolumeStatus>,
+    pub metrics: Option<MetricsSnapshot>,
+    pub served_by: Option<String>,
 }
 
 impl Default for SearchStatus {
@@ -42,6 +48,9 @@ impl Default for SearchStatus {
             in_flight: false,
             backend_mode: BackendMode::Mixed,
             indexing_state: "Idle".to_string(),
+            volumes: Vec::new(),
+            metrics: None,
+            served_by: None,
         }
     }
 }
@@ -56,6 +65,7 @@ pub struct SearchAppModel {
     pub status_task: Option<Task<()>>,
     pub last_search: Option<Instant>,
     pub show_onboarding: bool,
+    pub show_status: bool,
 }
 
 impl SearchAppModel {
@@ -72,6 +82,7 @@ impl SearchAppModel {
             status_task: None,
             last_search: None,
             show_onboarding: false,
+            show_status: false,
         };
 
         model.start_status_polling(cx);
@@ -97,6 +108,9 @@ impl SearchAppModel {
                                     |model: &mut SearchAppModel, cx: &mut Context<SearchAppModel>| {
                                         model.status.connected = true;
                                         model.status.indexing_state = resp.scheduler_state.clone();
+                                        model.status.volumes = resp.volumes;
+                                        model.status.metrics = resp.metrics;
+                                        model.status.served_by = resp.served_by;
                                         cx.notify();
                                     },
                                 )

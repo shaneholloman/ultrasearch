@@ -1,5 +1,8 @@
 use anyhow::Result;
-use global_hotkey::{GlobalHotKeyEvent, GlobalHotKeyManager, hotkey::{Code, HotKey, Modifiers}};
+use global_hotkey::{
+    hotkey::{Code, HotKey, Modifiers},
+    GlobalHotKeyEvent, GlobalHotKeyManager,
+};
 use muda::{Menu, MenuItem, PredefinedMenuItem};
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
@@ -55,7 +58,7 @@ pub fn spawn() -> Result<Receiver<UserAction>> {
         let tx_clone = tx.clone();
         let show_id = show_item.id().clone();
         let quit_id = quit_item.id().clone();
-        let hotkey_id = hotkey.id(); 
+        let hotkey_id = hotkey.id();
 
         thread::spawn(move || {
             let menu_rx = muda::MenuEvent::receiver();
@@ -76,11 +79,12 @@ pub fn spawn() -> Result<Receiver<UserAction>> {
                 if let Ok(_event) = tray_rx.try_recv() {
                     let _ = tx_clone.send(UserAction::Show);
                 }
-                
+
                 // Hotkey
                 if let Ok(event) = hotkey_rx.try_recv() {
-                    if event.id == hotkey_id && event.state == global_hotkey::HotKeyState::Released {
-                         let _ = tx_clone.send(UserAction::ToggleQuickSearch);
+                    if event.id == hotkey_id && event.state == global_hotkey::HotKeyState::Released
+                    {
+                        let _ = tx_clone.send(UserAction::ToggleQuickSearch);
                     }
                 }
 
@@ -100,7 +104,7 @@ pub fn spawn() -> Result<Receiver<UserAction>> {
                 DispatchMessageW(&msg);
             }
         }
-        
+
         #[cfg(not(target_os = "windows"))]
         loop {
             thread::sleep(Duration::from_secs(1));

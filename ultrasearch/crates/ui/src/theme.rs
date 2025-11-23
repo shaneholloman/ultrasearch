@@ -20,9 +20,7 @@ impl Theme {
         {
             use windows::core::w;
             use windows::Win32::System::Registry::{
-                RegGetValueW,
-                HKEY_CURRENT_USER,
-                RRF_RT_REG_DWORD,
+                RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD,
             };
 
             let subkey = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize");

@@ -1,9 +1,9 @@
+use crate::actions::{CopySelectedPath, OpenContainingFolder, ShowProperties};
+use crate::globals::GlobalAppState;
+use crate::icon_cache::IconCache;
 use crate::model::state::SearchAppModel;
 use crate::theme;
-use crate::icon_cache::IconCache;
-use crate::globals::GlobalAppState;
 use crate::views::context_menu::{ContextMenu, ContextMenuItem};
-use crate::actions::{OpenContainingFolder, CopySelectedPath, ShowProperties};
 use gpui::prelude::*;
 use gpui::{InteractiveElement, *};
 use ipc::SearchHit;
@@ -39,7 +39,8 @@ impl ResultsView {
 
         cx.observe(&icon_cache, |_, _, cx| {
             cx.notify();
-        }).detach();
+        })
+        .detach();
 
         Self {
             model,
@@ -56,7 +57,12 @@ impl ResultsView {
         });
     }
 
-    fn handle_context_menu(&mut self, index: usize, event: &MouseDownEvent, cx: &mut Context<Self>) {
+    fn handle_context_menu(
+        &mut self,
+        index: usize,
+        event: &MouseDownEvent,
+        cx: &mut Context<Self>,
+    ) {
         // 1. Select the row
         self.handle_click(index, cx);
 
@@ -93,38 +99,41 @@ impl ResultsView {
         // I'll just use a best-effort approach or center it if I can't find bounds.
         // Actually, let's try `cx.current_window()`?
         // I'll assume the position is relative to the window's content rect.
-        
+
         // Workaround: We can't easily get screen coords in `Context`?
         // We can pass `event.position` and let the popup open there.
         // `open_window` positions are screen coords.
         // If I assume 0,0 offset, it will appear at top-left of screen + mouse pos?
         // No, if window is at 500,500, mouse at 100,100 -> absolute 600,600.
         // If I use 100,100 for new window, it appears at 100,100 screen.
-        
+
         // I'll default to 0,0 for origin if bounds fail, but I'll try to use `cx.window().bounds()` if I can fix it.
         // Since I can't fix it quickly, I'll remove the bounds call and use a dummy position.
         // This is a known limitation of my current understanding of GPUI 0.2 API.
-        
+
         let origin = Point::new(px(0.), px(0.)); // TODO: Fix window origin
 
         let position = event.position;
         let screen_pos = origin + position;
 
-        let _handle = cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(Bounds {
-                    origin: screen_pos,
-                    size: Size { width: px(200.), height: px(150.) },
-                })),
-                titlebar: None,
-                window_background: WindowBackgroundAppearance::Transparent,
-                kind: WindowKind::PopUp,
-                ..WindowOptions::default()
-            },
-            |_, cx| {
-                cx.new(|cx| ContextMenu::new(Point::default(), items, cx))
-            },
-        ).ok();
+        let _handle = cx
+            .open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(Bounds {
+                        origin: screen_pos,
+                        size: Size {
+                            width: px(200.),
+                            height: px(150.),
+                        },
+                    })),
+                    titlebar: None,
+                    window_background: WindowBackgroundAppearance::Transparent,
+                    kind: WindowKind::PopUp,
+                    ..WindowOptions::default()
+                },
+                |_, cx| cx.new(|cx| ContextMenu::new(Point::default(), items, cx)),
+            )
+            .ok();
     }
 
     #[allow(dead_code)]
@@ -236,11 +245,13 @@ impl ResultsView {
             .modified
             .map(Self::format_modified_time)
             .unwrap_or_else(|| "-".to_string());
-        
+
         // Icon logic: Try native, fallback to emoji
         let ext_str = hit.ext.as_deref().unwrap_or("");
-        let icon_img = self.icon_cache.update(cx, |cache: &mut IconCache, cx| cache.get(ext_str, cx));
-        
+        let icon_img = self
+            .icon_cache
+            .update(cx, |cache: &mut IconCache, cx| cache.get(ext_str, cx));
+
         let icon_el = if let Some(src) = icon_img {
             img(src).w(px(20.)).h(px(20.)).into_any_element()
         } else {
@@ -249,6 +260,15 @@ impl ResultsView {
         };
 
         let score_pct = (hit.score * 100.0) as u32;
+        let row_bg = if is_selected {
+            colors.selection_bg
+        } else if is_hover {
+            colors.panel_bg
+        } else if is_even {
+            colors.bg
+        } else {
+            colors.panel_bg
+        };
 
         div()
             .w_full()
@@ -257,16 +277,7 @@ impl ResultsView {
             .items_center()
             .px_4()
             .gap_3()
-            .bg(if is_selected {
-                colors.selection_bg
-            } else if is_hover {
-                colors.panel_bg
-            } else if is_even {
-                colors.bg
-            } else {
-                colors.bg
-            })
-            .when(!is_selected && !is_hover && !is_even, |this| this.bg(colors.panel_bg)) // Striping
+            .bg(row_bg)
             .border_b_1()
             .border_color(colors.divider)
             .cursor_pointer()

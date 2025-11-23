@@ -247,7 +247,9 @@ impl SearchView {
             .tab_stop(true)
             .tab_index(0)
             .when(is_active, |this| {
-                this.bg(colors.selection_bg).text_color(colors.text_primary).shadow_sm()
+                this.bg(colors.selection_bg)
+                    .text_color(colors.text_primary)
+                    .shadow_sm()
             })
             .when(!is_active, |this| {
                 this.bg(colors.panel_bg)
@@ -326,11 +328,7 @@ impl Render for SearchView {
                             .rounded_lg()
                             .text_color(colors.text_primary)
                             .text_size(px(15.))
-                            .focus(|style| {
-                                style
-                                    .border_color(colors.match_highlight)
-                                    .bg(colors.bg)
-                            })
+                            .focus(|style| style.border_color(colors.match_highlight).bg(colors.bg))
                             .focus_visible(|style| {
                                 style.border_color(colors.match_highlight).shadow_md()
                             })
@@ -598,7 +596,9 @@ impl Render for SearchView {
                                 .text_size(px(11.))
                                 .cursor_pointer()
                                 .hover(|s| s.bg(hsla(0.0, 0.903, 0.7, 1.0)))
-                                .focus_visible(|s| s.border_1().border_color(colors.match_highlight))
+                                .focus_visible(|s| {
+                                    s.border_1().border_color(colors.match_highlight)
+                                })
                                 .tab_stop(true)
                                 .tab_index(0)
                                 .child("Retry")

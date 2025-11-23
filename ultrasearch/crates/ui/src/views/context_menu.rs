@@ -1,5 +1,5 @@
-use gpui::*;
 use crate::theme;
+use gpui::*;
 
 pub struct ContextMenu {
     pub items: Vec<ContextMenuItem>,
@@ -14,7 +14,11 @@ pub struct ContextMenuItem {
 }
 
 impl ContextMenu {
-    pub fn new(position: Point<Pixels>, items: Vec<ContextMenuItem>, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        position: Point<Pixels>,
+        items: Vec<ContextMenuItem>,
+        cx: &mut Context<Self>,
+    ) -> Self {
         Self {
             items,
             position,
@@ -43,25 +47,31 @@ impl Render for ContextMenu {
             .flex_col()
             .gap_1()
             .on_mouse_down_out(cx.listener(|_, _, window, _| window.remove_window()))
-            .children(
-                self.items.iter().map(|item| {
-                    let action = item.action.boxed_clone();
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .px_2()
-                        .py_1p5()
-                        .rounded_md()
-                        .hover(|s| s.bg(colors.selection_bg))
-                        .cursor_pointer()
-                        .on_mouse_down(MouseButton::Left, cx.listener(move |_, _, window, cx| {
+            .children(self.items.iter().map(|item| {
+                let action = item.action.boxed_clone();
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .px_2()
+                    .py_1p5()
+                    .rounded_md()
+                    .hover(|s| s.bg(colors.selection_bg))
+                    .cursor_pointer()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |_, _, window, cx| {
                             cx.dispatch_action(action.as_ref());
                             window.remove_window();
-                        }))
-                        .children(item.icon.map(|i| div().child(i)))
-                        .child(div().text_size(px(13.)).text_color(colors.text_primary).child(item.label.clone()))
-                })
-            )
+                        }),
+                    )
+                    .children(item.icon.map(|i| div().child(i)))
+                    .child(
+                        div()
+                            .text_size(px(13.))
+                            .text_color(colors.text_primary)
+                            .child(item.label.clone()),
+                    )
+            }))
     }
 }

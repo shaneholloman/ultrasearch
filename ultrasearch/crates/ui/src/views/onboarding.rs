@@ -1,9 +1,9 @@
-use gpui::*;
-use sysinfo::Disks;
-use crate::theme;
-use crate::model::state::SearchAppModel;
 use crate::actions::FinishOnboarding;
+use crate::model::state::SearchAppModel;
+use crate::theme;
+use gpui::*;
 use ipc;
+use sysinfo::Disks;
 use uuid;
 
 pub struct OnboardingView {
@@ -20,7 +20,7 @@ impl OnboardingView {
         for disk in sys_disks.list() {
             let mount = disk.mount_point().to_string_lossy().to_string();
             // Default to selecting Fixed disks
-            let selected = true; 
+            let selected = true;
             disks.push((mount, selected));
         }
 
@@ -52,11 +52,13 @@ impl OnboardingView {
     fn finish(&mut self, cx: &mut Context<Self>) {
         // 1. Update Config
         if let Ok(mut config) = core_types::config::load_or_create_config(None) {
-            config.volumes = self.available_disks.iter()
+            config.volumes = self
+                .available_disks
+                .iter()
                 .filter(|(_, selected)| *selected)
                 .map(|(name, _)| name.clone())
                 .collect();
-            
+
             // Save to file (default path)
             let target = std::path::PathBuf::from("config/config.toml");
             if let Ok(toml) = toml::to_string_pretty(&config) {
@@ -67,9 +69,12 @@ impl OnboardingView {
         // 2. Send IPC Reload
         let client = self.model.read(cx).client.clone();
         cx.spawn(|_, _cx: &mut AsyncApp| async move {
-            let req = ipc::ReloadConfigRequest { id: uuid::Uuid::new_v4() };
+            let req = ipc::ReloadConfigRequest {
+                id: uuid::Uuid::new_v4(),
+            };
             let _ = client.reload_config(req).await;
-        }).detach();
+        })
+        .detach();
 
         cx.dispatch_action(&FinishOnboarding);
     }
@@ -143,23 +148,23 @@ impl Render for OnboardingView {
                     .gap_6()
                     .child(content)
                     .child(
-                        div()
-                            .flex()
-                            .justify_end()
-                            .child(
-                                div()
-                                    .px_4()
-                                    .py_2()
-                                    .bg(colors.match_highlight)
-                                    .rounded_md()
-                                    .text_color(white())
-                                    .cursor_pointer()
-                                    .child(if self.step == 2 { "Finish" } else { "Next" })
-                                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                        div().flex().justify_end().child(
+                            div()
+                                .px_4()
+                                .py_2()
+                                .bg(colors.match_highlight)
+                                .rounded_md()
+                                .text_color(white())
+                                .cursor_pointer()
+                                .child(if self.step == 2 { "Finish" } else { "Next" })
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(|this, _, _, cx| {
                                         this.next_step(cx);
-                                    }))
-                            )
-                    )
+                                    }),
+                                ),
+                        ),
+                    ),
             )
     }
 }

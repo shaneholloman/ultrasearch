@@ -146,7 +146,13 @@ impl PreviewView {
         }
     }
 
-    fn render_info_row(&self, label: &str, value: String, icon: &'static str, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render_info_row(
+        &self,
+        label: &str,
+        value: String,
+        icon: &'static str,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let colors = theme::active_colors(cx);
         div()
             .flex()
