@@ -7958,6 +7958,7 @@ dependencies = [
  "ipc",
  "md5",
  "muda",
+ "once_cell",
  "serde",
  "sysinfo 0.31.4",
  "tokio",
