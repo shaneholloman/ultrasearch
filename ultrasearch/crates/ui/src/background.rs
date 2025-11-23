@@ -4,11 +4,28 @@ use global_hotkey::{
     GlobalHotKeyEvent, GlobalHotKeyManager,
 };
 use muda::{Menu, MenuItem, PredefinedMenuItem};
-use std::sync::mpsc::{self, Receiver};
+use once_cell::sync::OnceCell;
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 use sysinfo::System;
 use tray_icon::{Icon, TrayIconBuilder, TrayIconEvent};
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TrayState {
+    pub indexing: bool,
+    pub offline: bool,
+    pub update_available: bool,
+}
+
+static TRAY_STATE_TX: OnceCell<Sender<TrayState>> = OnceCell::new();
+
+/// Non-blocking setter; drops updates if background thread isn't ready yet.
+pub fn set_tray_status(state: TrayState) {
+    if let Some(tx) = TRAY_STATE_TX.get() {
+        let _ = tx.send(state);
+    }
+}
 
 pub enum UserAction {
     Show,
@@ -22,6 +39,8 @@ pub enum UserAction {
 
 pub fn spawn() -> Result<Receiver<UserAction>> {
     let (tx, rx) = mpsc::channel();
+    let (status_tx, status_rx) = mpsc::channel();
+    let _ = TRAY_STATE_TX.set(status_tx);
 
     thread::spawn(move || {
         // --- Hotkeys ---
@@ -34,52 +53,62 @@ pub fn spawn() -> Result<Receiver<UserAction>> {
             let _ = tx.send(UserAction::HotkeyConflict { powertoys });
         }
 
-        // --- Tray ---
-        // 1. Create Menu
-        let menu = Menu::new();
-        let show_item = MenuItem::new("Show UltraSearch", true, None);
-        let check_updates_item = MenuItem::new("Check for Updates", true, None);
-        let restart_item = MenuItem::new("Restart to Update", true, None);
-        let quit_item = MenuItem::new("Quit", true, None);
-        let _ = menu.append_items(&[
-            &show_item,
-            &check_updates_item,
-            &restart_item,
-            &PredefinedMenuItem::separator(),
-            &quit_item,
-        ]);
-
-        // 2. Create Icon
-        let width = 32u32;
-        let height = 32u32;
-        let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-        for _ in 0..(width * height) {
-            // Blue-ish
-            rgba.extend_from_slice(&[0, 120, 255, 255]);
-        }
-        let icon = Icon::from_rgba(rgba, width, height).unwrap();
-
-        // 3. Create Tray Icon
-        let _tray_icon = TrayIconBuilder::new()
-            .with_menu(Box::new(menu))
-            .with_tooltip("UltraSearch")
-            .with_icon(icon)
-            .build()
-            .unwrap();
-
-        // 4. Spawn Event Poller
+        // Spawn Event Poller + Tray
         let tx_clone = tx.clone();
-        let show_id = show_item.id().clone();
-        let check_id = check_updates_item.id().clone();
-        let restart_id = restart_item.id().clone();
-        let quit_id = quit_item.id().clone();
         let hotkey_id = hotkey.id();
         thread::spawn(move || {
+            // --- Tray ---
+            let menu = Menu::new();
+            let show_item = MenuItem::new("Show UltraSearch", true, None);
+            let check_updates_item = MenuItem::new("Check for Updates", true, None);
+            let restart_item = MenuItem::new("Restart to Update", true, None);
+            let quit_item = MenuItem::new("Quit", true, None);
+            let _ = menu.append_items(&[
+                &show_item,
+                &check_updates_item,
+                &restart_item,
+                &PredefinedMenuItem::separator(),
+                &quit_item,
+            ]);
+
+            let width = 32u32;
+            let height = 32u32;
+            let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+            for _ in 0..(width * height) {
+                rgba.extend_from_slice(&[0, 120, 255, 255]);
+            }
+            let icon = Icon::from_rgba(rgba, width, height).unwrap();
+
+            let tray_icon = TrayIconBuilder::new()
+                .with_menu(Box::new(menu))
+                .with_tooltip("UltraSearch")
+                .with_icon(icon)
+                .build()
+                .unwrap();
+
+            let show_id = show_item.id().clone();
+            let check_id = check_updates_item.id().clone();
+            let restart_id = restart_item.id().clone();
+            let quit_id = quit_item.id().clone();
             let menu_rx = muda::MenuEvent::receiver();
             let tray_rx = TrayIconEvent::receiver();
             let hotkey_rx = GlobalHotKeyEvent::receiver();
 
             loop {
+                // Tray status updates
+                if let Ok(state) = status_rx.try_recv() {
+                    let tooltip = if state.offline {
+                        "UltraSearch — Offline"
+                    } else if state.update_available {
+                        "UltraSearch — Update available"
+                    } else if state.indexing {
+                        "UltraSearch — Indexing"
+                    } else {
+                        "UltraSearch — Idle"
+                    };
+                    let _ = tray_icon.set_tooltip(Some(tooltip));
+                }
+
                 // Menu
                 if let Ok(event) = menu_rx.try_recv() {
                     if event.id == show_id {

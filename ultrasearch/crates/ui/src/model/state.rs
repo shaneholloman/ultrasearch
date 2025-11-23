@@ -1,3 +1,4 @@
+use crate::background::{set_tray_status, TrayState};
 use crate::ipc::client::IpcClient;
 use gpui::*;
 use ipc::{
@@ -123,6 +124,7 @@ impl SearchAppModel {
         };
 
         model.start_status_polling(cx);
+        model.update_tray_status();
         model
     }
 
@@ -153,6 +155,7 @@ impl SearchAppModel {
                                         model.status.volumes = resp.volumes;
                                         model.status.metrics = resp.metrics;
                                         model.status.served_by = resp.served_by;
+                                        model.update_tray_status();
                                         cx.notify();
                                     },
                                 )
@@ -168,6 +171,7 @@ impl SearchAppModel {
                                         model
                                             .status
                                             .indexing_state = "Disconnected (status)".to_string();
+                                        model.update_tray_status();
                                         cx.notify();
                                     },
                                 )
@@ -178,6 +182,24 @@ impl SearchAppModel {
             }
         });
         self.status_task = Some(task);
+    }
+
+    fn update_tray_status(&self) {
+        let indexing = self
+            .status
+            .indexing_state
+            .to_ascii_lowercase()
+            .contains("index");
+        let offline = !self.status.connected;
+        let update_available = matches!(
+            self.updates.status,
+            UpdateStatus::Available { .. } | UpdateStatus::ReadyToRestart { .. }
+        );
+        set_tray_status(TrayState {
+            indexing,
+            offline,
+            update_available,
+        });
     }
 
     pub fn set_query(&mut self, query: String, cx: &mut Context<SearchAppModel>) {

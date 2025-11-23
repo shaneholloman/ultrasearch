@@ -238,6 +238,54 @@ pub fn enqueue_content_job(job: JobSpec) -> bool {
     }
 }
 
+#[cfg(test)]
+pub fn live_counters() -> (usize, usize) {
+    let live = LIVE_STATE.get_or_init(SchedulerLiveState::default);
+    (
+        live.enqueued_content.load(Ordering::Relaxed),
+        live.dropped_content.load(Ordering::Relaxed),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::status_provider::init_basic_status_provider;
+
+    fn dummy_job() -> JobSpec {
+        JobSpec {
+            volume_id: 1,
+            file_id: 1,
+            path: PathBuf::from("C:\\dummy"),
+            max_bytes: None,
+            max_chars: None,
+        }
+    }
+
+    #[test]
+    fn enqueue_without_runtime_increments_dropped() {
+        let before = live_counters().1;
+        let ok = enqueue_content_job(dummy_job());
+        assert!(!ok);
+        let after = live_counters().1;
+        assert!(after > before, "dropped counter should increase");
+    }
+
+    #[test]
+    fn submit_content_job_increments_enqueued_counter() {
+        // Initialize status provider once for metric updates (harmless if already set).
+        let _ = init_basic_status_provider();
+        let cfg = AppConfig::default();
+        let mut rt = SchedulerRuntime::new(&cfg);
+
+        let before = live_counters().0;
+        rt.submit_content_job(dummy_job());
+        rt.update_live_counts();
+        let after = live_counters().0;
+        assert_eq!(after, before + 1, "enqueued counter should increase");
+    }
+}
+
 /// Utility to let other components set active worker count directly (e.g., worker manager updates).
 pub fn set_live_active_workers(active: u32) {
     let live = LIVE_STATE.get_or_init(SchedulerLiveState::default);
