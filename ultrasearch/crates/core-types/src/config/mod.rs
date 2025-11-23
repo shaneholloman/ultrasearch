@@ -252,6 +252,8 @@ pub struct SchedulerSection {
     pub disk_busy_bytes_per_s: u64,
     #[serde(default = "default_content_batch")]
     pub content_batch_size: u64,
+    #[serde(default)]
+    pub power_save_mode: bool,
 }
 
 impl Default for SchedulerSection {
@@ -265,6 +267,7 @@ impl Default for SchedulerSection {
             cpu_hard_limit_pct: default_cpu_hard(),
             disk_busy_bytes_per_s: default_disk_busy(),
             content_batch_size: default_content_batch(),
+            power_save_mode: true, // Default to enabled
         }
     }
 }

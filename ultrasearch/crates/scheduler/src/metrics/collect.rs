@@ -19,6 +19,10 @@ pub struct SystemLoad {
     pub disk_busy: bool,
     /// Duration covered by this sample (useful for metrics surfaces).
     pub sample_duration: Duration,
+    /// True if the system is running on battery power.
+    pub on_battery: bool,
+    /// True if a full-screen application (game/presentation) is active.
+    pub game_mode: bool,
 }
 
 pub struct SystemLoadSampler {
@@ -81,6 +85,8 @@ impl SystemLoadSampler {
         let mem_used_percent = (self.system.used_memory() as f32 / total_mem as f32) * 100.0;
 
         let (disk_bytes_per_sec, disk_busy) = self.sample_disk(elapsed);
+        let on_battery = self.sample_power();
+        let game_mode = self.sample_game_mode();
 
         self.last_sample = now;
 
@@ -90,6 +96,8 @@ impl SystemLoadSampler {
             disk_bytes_per_sec,
             disk_busy,
             sample_duration: elapsed,
+            on_battery,
+            game_mode,
         }
     }
 
@@ -109,6 +117,30 @@ impl SystemLoadSampler {
         let busy = false;
         let _ = elapsed; // keep signature consistent
         (bps, busy)
+    }
+    fn sample_power(&self) -> bool {
+        #[cfg(target_os = "windows")]
+        {
+            use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+            let mut status = SYSTEM_POWER_STATUS::default();
+            if unsafe { GetSystemPowerStatus(&mut status) }.is_ok() {
+                // ACLineStatus: 0 = Offline (Battery), 1 = Online, 255 = Unknown.
+                // We assume on battery if AC is offline (0).
+                return status.ACLineStatus == 0;
+            }
+        }
+        false
+    }
+
+    fn sample_game_mode(&self) -> bool {
+        #[cfg(target_os = "windows")]
+        {
+            use windows::Win32::UI::Shell::{SHQueryUserNotificationState, QUNS_BUSY, QUNS_RUNNING_D3D_FULL_SCREEN};
+            if let Ok(state) = unsafe { SHQueryUserNotificationState() } {
+                return state == QUNS_BUSY || state == QUNS_RUNNING_D3D_FULL_SCREEN;
+            }
+        }
+        false
     }
 }
 
