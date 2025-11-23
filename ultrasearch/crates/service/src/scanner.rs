@@ -3,8 +3,8 @@ use crate::meta_ingest::ingest_with_paths;
 use crate::scheduler_runtime::{content_job_from_meta, enqueue_content_job};
 use crate::status_provider::{update_status_last_commit, update_status_volumes};
 use anyhow::Result;
+use core_types::FileMeta;
 use core_types::config::AppConfig;
-use core_types::{DocKey, FileFlags, FileMeta};
 use ipc::VolumeStatus;
 use meta_index::{open_or_create_index, open_reader};
 use ntfs_watcher::{
@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tantivy::Document;
+use tantivy::DocAddress;
 use tokio::time::{Duration, interval};
 
 pub fn scan_volumes(cfg: &AppConfig) -> Result<Vec<JobSpec>> {
@@ -264,15 +264,25 @@ pub async fn watch_polling(cfg: AppConfig) -> Result<()> {
 
     loop {
         ticker.tick().await;
-        match detect_changed_files(&cfg, &mut last_seen) {
-            Ok(jobs) if !jobs.is_empty() => {
-                for job in jobs {
-                    let _ = enqueue_content_job(job);
+        let cfg_clone = cfg.clone();
+        let mut seen_clone = last_seen.clone();
+        let res =
+            tokio::task::spawn_blocking(move || detect_changed_files(&cfg_clone, &mut seen_clone))
+                .await;
+
+        match res {
+            Ok(Ok(jobs)) => {
+                if !jobs.is_empty() {
+                    for job in jobs {
+                        let _ = enqueue_content_job(job);
+                    }
                 }
+                // Update last_seen only on success
+                last_seen = seen_clone;
             }
-            Ok(_) => { /* no changes */ }
-            Err(err) => tracing::warn!("polling fallback error: {err}"),
-        }
+            Ok(Err(err)) => tracing::warn!("polling fallback error: {err}"),
+            Err(join_err) => tracing::warn!("polling fallback task panicked: {join_err}"),
+        };
     }
 }
 
@@ -291,73 +301,57 @@ fn detect_changed_files(
 
     let mut changed = Vec::new();
 
-    for segment_reader in searcher.segment_readers() {
-        let store = segment_reader.get_store_reader(1024)?;
+    for (segment_ord, segment_reader) in searcher.segment_readers().iter().enumerate() {
         let alive = segment_reader.alive_bitset();
-        for stored_doc in store.iter(alive.as_deref())? {
-            let stored_doc: Document = stored_doc?;
-
-            let key_u64 = stored_doc
-                .get_first(meta.fields.doc_key)
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            let doc_key = DocKey(key_u64);
-
-            let path: Option<String> = stored_doc
-                .get_first(meta.fields.path)
-                .and_then(|v| v.as_text())
-                .map(|s| s.to_string());
-            let recorded_modified = stored_doc
-                .get_first(meta.fields.modified)
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
-
-            let path: String = match path {
-                Some(p) => p,
-                None => continue,
+        let max_doc = segment_reader.max_doc();
+        for doc_id in 0..max_doc {
+            if let Some(bits) = alive
+                && !bits.is_alive(doc_id)
+            {
+                continue;
+            }
+            let addr = DocAddress {
+                segment_ord: segment_ord as u32,
+                doc_id,
             };
+            let doc = searcher.doc(addr)?;
+            if let Some(meta_doc) = meta_index::tiers::doc_to_meta(&doc, &meta.fields)
+                && let Some(path) = &meta_doc.path
+            {
+                let meta_fs = match fs::metadata(path) {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                let current_mtime = meta_fs
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(meta_doc.modified);
 
-            // stat current mtime
-            let meta_fs = match fs::metadata(&path) {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-            let current_mtime = meta_fs
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-                .map(|d| d.as_secs() as i64)
-                .unwrap_or(recorded_modified);
-
-            let prev = *last_seen.get(&doc_key).unwrap_or(&recorded_modified);
-            if current_mtime > prev {
-                if let Some(job) = content_job_from_meta(
-                    &FileMeta {
-                        key: doc_key,
-                        volume: doc_key.volume(),
-                        parent: None,
-                        name: Path::new(&path)
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        ext: Path::new(&path)
-                            .extension()
-                            .and_then(|s| s.to_str())
-                            .map(|s| s.to_ascii_lowercase()),
-                        path: Some(path.clone()),
-                        size: meta_fs.len(),
-                        created: recorded_modified,
-                        modified: current_mtime,
-                        flags: FileFlags::empty(),
-                    },
-                    &cfg.extract,
-                ) {
+                let prev = *last_seen.get(&meta_doc.key).unwrap_or(&meta_doc.modified);
+                if current_mtime > prev
+                    && let Some(job) = content_job_from_meta(
+                        &FileMeta {
+                            key: meta_doc.key,
+                            volume: meta_doc.volume,
+                            parent: None,
+                            name: meta_doc.name.clone(),
+                            ext: meta_doc.ext.clone(),
+                            path: Some(path.clone()),
+                            size: meta_fs.len(),
+                            created: meta_doc.created,
+                            modified: current_mtime,
+                            flags: core_types::FileFlags::empty(),
+                        },
+                        &cfg.extract,
+                    )
+                {
                     changed.push(job);
                 }
-            }
 
-            last_seen.insert(doc_key, current_mtime);
+                last_seen.insert(meta_doc.key, current_mtime);
+            }
         }
     }
 

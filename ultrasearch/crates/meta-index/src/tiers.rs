@@ -130,7 +130,7 @@ impl TieredMetaIndex {
 }
 
 // Helper to reverse mapping (Document -> MetaDoc)
-fn doc_to_meta(doc: &TantivyDocument, fields: &MetaFields) -> Option<MetaDoc> {
+pub fn doc_to_meta(doc: &TantivyDocument, fields: &MetaFields) -> Option<MetaDoc> {
     let mut key = None;
     let mut name = None;
     let mut path = None;

@@ -22,10 +22,13 @@ struct SchedulerLiveState {
     metadata: AtomicUsize,
     content: AtomicUsize,
     active_workers: AtomicU32,
+    dropped_content: AtomicUsize,
 }
 
 static LIVE_STATE: OnceLock<SchedulerLiveState> = OnceLock::new();
 static JOB_SENDER: OnceLock<mpsc::UnboundedSender<JobSpec>> = OnceLock::new();
+
+const MAX_CONTENT_QUEUE: usize = 10_000;
 
 /// Runtime wrapper that drives a simple scheduling loop and dispatches content batches.
 pub struct SchedulerRuntime {
@@ -100,8 +103,7 @@ impl SchedulerRuntime {
 
     /// Submit a content indexing job (path + doc ids).
     pub fn submit_content_job(&mut self, job: JobSpec) {
-        self.content_jobs.push_back(job);
-        self.update_live_counts();
+        self.push_job(job);
     }
 
     /// Submit a batch of content indexing jobs.
@@ -154,8 +156,12 @@ impl SchedulerRuntime {
         let ct = self.content_jobs.len();
         let workers = self.live.active_workers.load(Ordering::Relaxed);
         update_status_scheduler_state(format!(
-            "idle={:?} cpu={:.1}% mem={:.1}% queue(content)={}",
-            idle_sample.state, load.cpu_percent, load.mem_used_percent, ct
+            "idle={:?} cpu={:.1}% mem={:.1}% queue(content)={} dropped={}",
+            idle_sample.state,
+            load.cpu_percent,
+            load.mem_used_percent,
+            ct,
+            self.live.dropped_content.load(Ordering::Relaxed)
         ));
         update_status_queue_state(Some(ct as u64), Some(workers));
         update_status_metrics(None);
@@ -187,6 +193,21 @@ impl SchedulerRuntime {
 
             self.live.active_workers.fetch_sub(1, Ordering::Relaxed);
         }
+    }
+
+    fn push_job(&mut self, job: JobSpec) {
+        if self.content_jobs.len() >= MAX_CONTENT_QUEUE {
+            self.live.dropped_content.fetch_add(1, Ordering::Relaxed);
+            tracing::warn!(
+                queue_len = self.content_jobs.len(),
+                max = MAX_CONTENT_QUEUE,
+                "content queue full; dropping job for {:?}",
+                job.path
+            );
+            return;
+        }
+        self.content_jobs.push_back(job);
+        self.update_live_counts();
     }
 }
 
