@@ -28,11 +28,8 @@ impl ResultsView {
 
         cx.observe(&model, |this: &mut Self, model, cx| {
             let read = model.read(cx);
-            let count = read.results.len();
+            let count = read.current_page_results().len();
             this.list_state.reset(count);
-            if let Some(sel) = read.selected_index {
-                this.list_state.scroll_to_reveal_item(sel);
-            }
             cx.notify();
         })
         .detach();
@@ -52,7 +49,9 @@ impl ResultsView {
 
     fn handle_click(&mut self, index: usize, cx: &mut Context<Self>) {
         self.model.update(cx, |model, cx| {
-            model.selected_index = Some(index);
+            let global_index = model.page_start().saturating_add(index);
+            model.selected_index = Some(global_index.min(model.results.len().saturating_sub(1)));
+            model.ensure_page_for_selection();
             cx.notify();
         });
     }
@@ -82,6 +81,11 @@ impl ResultsView {
                 label: "Copy Full Path".into(),
                 icon: Some("📋"),
                 action: Box::new(CopySelectedPath),
+            },
+            ContextMenuItem {
+                label: "Copy File".into(),
+                icon: Some("📄"),
+                action: Box::new(crate::actions::CopySelectedFile),
             },
             ContextMenuItem {
                 label: "Properties".into(),
@@ -430,7 +434,10 @@ impl ResultsView {
 impl Render for ResultsView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let model = self.model.clone();
-        let has_results = !model.read(cx).results.is_empty();
+        let model_read = model.read(cx);
+        let start = model_read.page_start();
+        let page_hits = model_read.current_page_results().to_vec();
+        let has_results = !page_hits.is_empty();
         let hover_index = self.hover_index;
         let colors = theme::active_colors(cx);
 
@@ -456,17 +463,16 @@ impl Render for ResultsView {
                     list(
                         self.list_state.clone(),
                         cx.processor(move |this, ix, _window, cx| {
-                            let (hit, is_selected) = {
-                                let model_read = model.read(cx);
-                                if let Some(hit) = model_read.results.get(ix).cloned() {
-                                    (hit, model_read.is_selected(ix))
-                                } else {
-                                    return div().into_any_element();
+                            let (hit, is_selected) = match page_hits.get(ix).cloned() {
+                                Some(hit) => {
+                                    let sel = model.read(cx).is_selected(start + ix);
+                                    (hit, sel)
                                 }
+                                None => return div().into_any_element(),
                             };
 
                             let is_hover = hover_index == Some(ix);
-                            this.render_row(ix, &hit, is_selected, is_hover, cx)
+                            this.render_row(start + ix, &hit, is_selected, is_hover, cx)
                         }),
                     )
                     .size_full(),

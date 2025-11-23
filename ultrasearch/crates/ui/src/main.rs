@@ -121,6 +121,23 @@ impl UltraSearchWindow {
         }
     }
 
+    fn on_copy_selected_file(
+        &mut self,
+        _: &CopySelectedFile,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        // For now, copy path to clipboard. TODO: add file drop clipboard on Windows.
+        if let Some(path) = self
+            .model
+            .read(cx)
+            .selected_row()
+            .and_then(|hit| hit.path.clone())
+        {
+            cx.write_to_clipboard(ClipboardItem::new_string(path));
+        }
+    }
+
     fn on_quit(&mut self, _: &QuitApp, _window: &mut Window, cx: &mut Context<Self>) {
         cx.quit();
     }
@@ -247,6 +264,7 @@ impl Render for UltraSearchWindow {
             .on_action(cx.listener(Self::on_mode_mixed))
             .on_action(cx.listener(Self::on_mode_content))
             .on_action(cx.listener(Self::on_copy_selected_path))
+            .on_action(cx.listener(Self::on_copy_selected_file))
             .on_action(cx.listener(Self::on_quit))
             .on_action(cx.listener(Self::on_finish_onboarding))
             .on_action(cx.listener(Self::on_open_folder))
@@ -474,6 +492,9 @@ fn main() {
             KeyBinding::new("ctrl-o", OpenSelected, None),
             KeyBinding::new("cmd-c", CopySelectedPath, None),
             KeyBinding::new("ctrl-c", CopySelectedPath, None),
+            KeyBinding::new("ctrl-shift-c", CopySelectedFile, None),
+            KeyBinding::new("alt-enter", ShowProperties, None),
+            KeyBinding::new("ctrl-shift-o", OpenContainingFolder, None),
             KeyBinding::new("cmd-q", QuitApp, None),
             KeyBinding::new("ctrl-q", QuitApp, None),
         ]);

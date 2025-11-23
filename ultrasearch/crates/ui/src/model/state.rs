@@ -60,6 +60,8 @@ pub struct SearchAppModel {
     pub results: Vec<SearchHit>,
     pub status: SearchStatus,
     pub selected_index: Option<usize>,
+    pub page_size: usize,
+    pub page: usize,
     pub client: IpcClient,
     pub search_debounce: Option<Task<()>>,
     pub status_task: Option<Task<()>>,
@@ -77,6 +79,8 @@ impl SearchAppModel {
             results: Vec::new(),
             status: SearchStatus::default(),
             selected_index: None,
+            page_size: 50,
+            page: 0,
             client,
             search_debounce: None,
             status_task: None,
@@ -164,6 +168,7 @@ impl SearchAppModel {
                                     model.results.clear();
                                     model.status.total = 0;
                                     model.status.shown = 0;
+                                    model.page = 0;
                                     model.selected_index = None;
                                     cx.notify();
                                 },
@@ -204,16 +209,14 @@ impl SearchAppModel {
                                     |model: &mut SearchAppModel,
                                      cx: &mut Context<SearchAppModel>| {
                                         model.status.in_flight = false;
-                                        model.results = resp.hits;
-                                        model.status.total = resp.total;
-                                        model.status.shown = model.results.len();
+                                       model.results = resp.hits;
+                                       model.status.total = resp.total;
+                                        model.page = 0;
+                                        model.status.shown = model.current_page_results().len();
                                         model.status.last_latency_ms = Some(latency);
                                         model.status.connected = true;
-                                        model.selected_index = if !model.results.is_empty() {
-                                            Some(0)
-                                        } else {
-                                            None
-                                        };
+                                        model.selected_index =
+                                            if !model.results.is_empty() { Some(0) } else { None };
                                         cx.notify();
                                     },
                                 )
@@ -261,6 +264,7 @@ impl SearchAppModel {
             Some(i) => i,
             None => 0,
         });
+        self.ensure_page_for_selection();
         cx.notify();
     }
 
@@ -273,6 +277,7 @@ impl SearchAppModel {
             Some(i) => i,
             None => 0,
         });
+        self.ensure_page_for_selection();
         cx.notify();
     }
 
@@ -282,6 +287,58 @@ impl SearchAppModel {
 
     pub fn is_selected(&self, index: usize) -> bool {
         self.selected_index == Some(index)
+    }
+
+    pub fn set_page(&mut self, page: usize, cx: &mut Context<SearchAppModel>) {
+        let max_page = self
+            .results
+            .len()
+            .div_ceil(self.page_size)
+            .saturating_sub(1);
+        self.page = page.min(max_page);
+        self.status.shown = self.current_page_results().len();
+        cx.notify();
+    }
+
+    pub fn page_start(&self) -> usize {
+        self.page.saturating_mul(self.page_size)
+    }
+
+    pub fn current_page_results(&self) -> &[SearchHit] {
+        let start = self.page_start();
+        let end = (start + self.page_size).min(self.results.len());
+        &self.results[start..end]
+    }
+
+    pub fn load_mock_results(&mut self, total: usize, cx: &mut Context<SearchAppModel>) {
+        self.results.clear();
+        for i in 0..total {
+            self.results.push(SearchHit {
+                key: core_types::DocKey::from_parts(1, i as u64 + 1),
+                score: 1.0 - (i as f32 / total as f32),
+                name: Some(format!("Design Spec {}", i + 1)),
+                path: Some(format!(r"C:\Projects\UltraSearch\Docs\spec_{i:04}.md")),
+                ext: Some("md".into()),
+                size: Some(12_345 + i as u64 * 10),
+                modified: Some(1_700_000_000 + i as i64 * 60),
+                snippet: Some("Lorem ipsum dolor sit amet, consectetur adipiscing elit.".into()),
+            });
+        }
+        self.page = 0;
+        self.status.total = self.results.len() as u64;
+        self.status.shown = self.current_page_results().len();
+        self.selected_index = if self.results.is_empty() {
+            None
+        } else {
+            Some(0)
+        };
+        cx.notify();
+    }
+
+    pub fn ensure_page_for_selection(&mut self) {
+        if let Some(sel) = self.selected_index {
+            self.page = sel / self.page_size;
+        }
     }
 }
 

@@ -13,6 +13,7 @@ actions!(
         ModeMixed,
         ModeContent,
         CopySelectedPath,
+        CopySelectedFile,
         QuitApp,
         FinishOnboarding,
         OpenContainingFolder,

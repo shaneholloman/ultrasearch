@@ -8,11 +8,15 @@ pub enum ThemeMode {
 
 pub struct Theme {
     pub mode: ThemeMode,
+    pub tokens: Tokens,
 }
 
 impl Theme {
     pub fn new(mode: ThemeMode) -> Self {
-        Self { mode }
+        Self {
+            mode,
+            tokens: Tokens::default(),
+        }
     }
 
     pub fn detect() -> ThemeMode {
@@ -90,6 +94,35 @@ pub struct ThemeColors {
     pub panel_bg: Hsla,
 }
 
+#[derive(Debug, Clone)]
+pub struct Tokens {
+    pub radius_sm: Pixels,
+    pub radius_md: Pixels,
+    pub radius_lg: Pixels,
+    pub spacing_sm: f32,
+    pub spacing_md: f32,
+    pub spacing_lg: f32,
+    pub type_sm: Pixels,
+    pub type_md: Pixels,
+    pub type_lg: Pixels,
+}
+
+impl Default for Tokens {
+    fn default() -> Self {
+        Self {
+            radius_sm: px(6.),
+            radius_md: px(10.),
+            radius_lg: px(14.),
+            spacing_sm: 6.0,
+            spacing_md: 12.0,
+            spacing_lg: 20.0,
+            type_sm: px(12.),
+            type_md: px(14.),
+            type_lg: px(16.),
+        }
+    }
+}
+
 use crate::globals::GlobalAppState;
 
 pub fn active_colors(cx: &App) -> ThemeColors {
@@ -97,5 +130,13 @@ pub fn active_colors(cx: &App) -> ThemeColors {
         state.theme.read(cx).colors()
     } else {
         Theme::new(ThemeMode::Dark).colors()
+    }
+}
+
+pub fn active_tokens(cx: &App) -> Tokens {
+    if let Some(state) = cx.try_global::<GlobalAppState>() {
+        state.theme.read(cx).tokens.clone()
+    } else {
+        Tokens::default()
     }
 }
