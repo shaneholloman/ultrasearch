@@ -98,18 +98,11 @@ where
 define_windows_service!(ffi_service_main, my_service_main);
 
 fn my_service_main(_arguments: Vec<OsString>) {
-    // This function is called by the SCM in a new thread.
-    // But we designed `run_service` to take a closure, which is hard to pass through the static FFI boundary
-    // without using global state.
-    //
-    // A common pattern is to have `run_service` be the thing called FROM main, and IT calls `service_dispatcher::start`.
-    // BUT `service_dispatcher::start` takes the `ffi_service_main` extern fn.
-    //
-    // So we actually need a global or a way to pass the logic.
-    // For simplicity in this skeleton, we might just assume the logic is "standard app logic"
-    // and hardcode the call to a shared `run_app` from here, OR use a OnceLock to store the workload.
-    //
-    // However, to keep it clean, we'll expose a `launch` function that main.rs calls.
+    if let Err(e) = run_service(|_| Ok(())) {
+        // We can't easily log to stdout here, so maybe log to event viewer or file if possible.
+        // For now, just ignore as we might be crashing anyway.
+        eprintln!("Service failed: {e}");
+    }
 }
 
 /// Called by main.rs when running as a service.

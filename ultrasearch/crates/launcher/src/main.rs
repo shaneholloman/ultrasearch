@@ -73,8 +73,8 @@ fn main() -> Result<()> {
     service_cmd
         .arg("--console")
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(Stdio::inherit()) // Allow user to see service logs
+        .stderr(Stdio::inherit())
         .creation_flags(0x08000000); // CREATE_NO_WINDOW
     let mut service = ChildGuard::spawn("service", &mut service_cmd)?;
     println!("{}", style("service started, waiting for IPC...").dim());

@@ -170,12 +170,16 @@ fn ingest_seed_metadata(cfg: &AppConfig, metas: Vec<core_types::FileMeta>) -> Re
 }
 
 fn run_initial_metadata_ingest(cfg: &AppConfig) -> Result<()> {
+    tracing::info!("Starting initial metadata ingest...");
     let volumes = match discover_volumes() {
         Ok(v) if v.is_empty() => {
             tracing::info!("no NTFS volumes discovered; skipping initial metadata ingest");
             return Ok(());
         }
-        Ok(v) => v,
+        Ok(v) => {
+            tracing::info!("Discovered {} NTFS volumes.", v.len());
+            v
+        }
         Err(NtfsError::NotSupported) => {
             tracing::info!("platform does not support NTFS watcher; skipping metadata ingest");
             return Ok(());
@@ -199,7 +203,10 @@ fn run_initial_metadata_ingest(cfg: &AppConfig) -> Result<()> {
 
                 let count = metas.len() as u64;
                 tracing::info!(guid = %volume.guid_path, files = count, "ingesting metadata batch into meta-index");
-                ingest_with_paths(&cfg.paths, metas, None)?;
+                match ingest_with_paths(&cfg.paths, metas, None) {
+                    Ok(_) => tracing::info!("Successfully ingested {} files.", count),
+                    Err(e) => tracing::error!("Failed to ingest files: {}", e),
+                }
 
                 status.push(VolumeStatus {
                     volume: volume.id,
@@ -212,7 +219,19 @@ fn run_initial_metadata_ingest(cfg: &AppConfig) -> Result<()> {
                 update_status_last_commit(Some(unix_timestamp_secs()));
             }
             Err(err) => {
-                tracing::warn!(guid = %volume.guid_path, error = %err, "failed to enumerate MFT; skipping volume");
+                let msg = err.to_string();
+                if msg.contains("Access is denied") || msg.contains("privilege") {
+                    tracing::error!(
+                        guid = %volume.guid_path,
+                        "CRITICAL: Failed to enumerate MFT due to permissions. Please run the application as Administrator."
+                    );
+                } else {
+                    tracing::warn!(
+                        guid = %volume.guid_path,
+                        error = %err,
+                        "failed to enumerate MFT; skipping volume"
+                    );
+                }
             }
         }
     }
