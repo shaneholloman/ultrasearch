@@ -1,0 +1,1 @@
+- [x] ultrasearch-5k6: Non-Windows disk busy metric now uses sysinfo deltas; bead closed 2025-11-23.

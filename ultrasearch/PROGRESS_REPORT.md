@@ -1,0 +1,1 @@
+- Closed ultrasearch-5k6 (non-Windows disk busy metric source) on 2025-11-23; sysinfo delta sampler is live.
