@@ -124,6 +124,9 @@ impl SystemLoadSampler {
 
     fn sample_disk(&mut self, elapsed: Duration) -> (u64, bool) {
         #[cfg(target_os = "windows")]
+        let _ = elapsed;
+
+        #[cfg(target_os = "windows")]
         {
             if let Some(counter) = self.disk_counter.as_mut()
                 && let Ok(bytes_per_sec) = counter.sample_bytes_per_sec()
@@ -131,12 +134,15 @@ impl SystemLoadSampler {
                 let busy = bytes_per_sec >= self.disk_busy_threshold_bps;
                 return (bytes_per_sec, busy);
             }
+
+            // Fallback on Windows when we cannot sample counters.
+            (0, false)
         }
 
         #[cfg(not(target_os = "windows"))]
         {
             // Use sysinfo disk usage deltas between refreshes.
-            self.disks.refresh();
+            self.disks.refresh(false);
 
             let delta_bytes: u64 = self
                 .disks
@@ -163,12 +169,6 @@ impl SystemLoadSampler {
             let busy = bytes_per_sec >= self.disk_busy_threshold_bps;
             return (bytes_per_sec, busy);
         }
-
-        // Fallback when disk metrics unavailable.
-        let bps = 0;
-        let busy = false;
-        let _ = elapsed; // keep signature consistent
-        (bps, busy)
     }
     fn sample_power(&self) -> bool {
         #[cfg(target_os = "windows")]
