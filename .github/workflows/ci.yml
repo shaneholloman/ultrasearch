@@ -172,10 +172,10 @@ jobs:
           $svc.Id | Out-File service.pid
       - name: Wait for IPC and run status
         run: |
-          Start-Sleep -Seconds 3
+          Start-Sleep -Seconds 5
           $servicePid = Get-Content service.pid
           $cli = "target/release/cli.exe"
-          $attempts = 10
+          $attempts = 20
           $ok = $false
           for ($i = 1; $i -le $attempts; $i++) {
             & $cli status --json
@@ -183,8 +183,8 @@ jobs:
               $ok = $true
               break
             }
-            Write-Host "status attempt $i/$attempts failed; retrying in 2s"
-            Start-Sleep -Seconds 2
+            Write-Host "status attempt $i/$attempts failed; retrying in 3s"
+            Start-Sleep -Seconds 3
           }
           if (-not $ok) { throw "cli status never succeeded" }
           Stop-Process -Id $servicePid
