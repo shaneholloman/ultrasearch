@@ -320,6 +320,11 @@ mod tests {
 
     #[test]
     fn enqueue_without_runtime_increments_dropped() {
+        // Ensure we start from a clean slate in case another test initialized the runtime.
+        RUNTIME_ACTIVE.store(false, Ordering::Relaxed);
+        let live = LIVE_STATE.get_or_init(SchedulerLiveState::default);
+        live.dropped_content.store(0, Ordering::Relaxed);
+
         let before = live_counters().1;
         let ok = enqueue_content_job(dummy_job());
         assert!(!ok);
