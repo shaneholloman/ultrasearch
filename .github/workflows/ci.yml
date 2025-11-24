@@ -126,7 +126,8 @@ jobs:
         continue-on-error: true
         run: |
           cd ultrasearch/crates/ui
-          cargo wix --manifest-path Cargo.wix.toml -p ui
+          $binPath = Resolve-Path ..\..\target\release\ui.exe
+          cargo wix --manifest-path Cargo.wix.toml --bin-path "$binPath"
       - name: List wix outputs
         run: |
           Write-Host "Wix output contents:"
