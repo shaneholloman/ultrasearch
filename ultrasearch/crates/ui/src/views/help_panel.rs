@@ -230,7 +230,7 @@ impl Render for HelpPanel {
                         flush(&mut current, &mut nodes);
                         current = Some((Block::Link, dest_url.to_string()));
                     }
-                    Event::End(TagEnd::Link { .. }) => {
+                    Event::End(TagEnd::Link) => {
                         flush(&mut current, &mut nodes);
                     }
                     Event::Text(text) => {
