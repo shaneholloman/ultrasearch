@@ -126,7 +126,13 @@ jobs:
         continue-on-error: true
         run: |
           cd ultrasearch/crates/ui
-          $binPath = Resolve-Path ..\..\target\release\ui.exe
+          $binPath = Join-Path $env:GITHUB_WORKSPACE "target\release\ui.exe"
+          if (-not (Test-Path $binPath)) {
+            Write-Host "Release UI binary not found at $binPath"
+            Write-Host "Available files under target/release:"
+            Get-ChildItem "$env:GITHUB_WORKSPACE/target/release" -ErrorAction SilentlyContinue
+            throw "ui.exe not built; cargo wix cannot continue"
+          }
           cargo wix --manifest-path Cargo.wix.toml --bin-path "$binPath"
       - name: List wix outputs
         run: |
