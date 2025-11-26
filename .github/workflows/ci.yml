@@ -126,7 +126,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $env:CARGO_TARGET_DIR = Join-Path $env:GITHUB_WORKSPACE "target"
-          cd $env:GITHUB_WORKSPACE/ultrasearch/crates/ui
+          $uiDir = Join-Path $env:GITHUB_WORKSPACE "ultrasearch\crates\ui"
           $binPath = Join-Path $env:CARGO_TARGET_DIR "release\ui.exe"
           Write-Host "Binary path: $binPath"
           if (-not (Test-Path $binPath)) {
@@ -135,14 +135,24 @@ jobs:
             Get-ChildItem "$env:CARGO_TARGET_DIR/release" -ErrorAction SilentlyContinue
             exit 1
           }
-          Copy-Item Cargo.toml Cargo.original.toml -Force
-          (Get-Content Cargo.original.toml) -replace 'workspace\s*=\s*true', 'version = "*"' | Set-Content Cargo.toml
+          $tempDir = Join-Path $env:RUNNER_TEMP "wix_manifest"
+          New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+          $tempManifest = Join-Path $tempDir "Cargo.toml"
+          # Patch workspace dependencies to wildcard versions and add a dummy bin so metadata succeeds.
+          (Get-Content (Join-Path $uiDir "Cargo.toml")) -replace 'workspace\s*=\s*true', 'version = "*"' | Set-Content $tempManifest
+          Add-Content $tempManifest @"
+
+[[bin]]
+name = "ui"
+path = "placeholder.rs"
+"@
+          # Create placeholder source so cargo metadata is satisfied.
+          Set-Content -Path (Join-Path $tempDir "placeholder.rs") -Value "fn main() {}"
           Write-Host "Before wix, wix dir listing:"
           Get-ChildItem "$env:CARGO_TARGET_DIR/wix" -Recurse -ErrorAction SilentlyContinue
-          cargo wix -p ui --no-build --bin-path "$binPath"
+          cargo wix --manifest-path $tempManifest --no-build --bin-path "$binPath"
           Write-Host "After wix, wix dir listing:"
           Get-ChildItem "$env:CARGO_TARGET_DIR/wix" -Recurse -ErrorAction SilentlyContinue
-          Move-Item -Force Cargo.original.toml Cargo.toml
       - name: List wix outputs
         run: |
           Write-Host "Wix output contents:"
