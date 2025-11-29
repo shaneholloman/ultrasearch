@@ -9,8 +9,8 @@ use crate::status::make_status_response;
 use crate::status_provider::status_snapshot;
 use anyhow::Result;
 use ipc::{
-    MetricsSnapshot, ReloadConfigRequest, ReloadConfigResponse, SearchRequest, StatusRequest,
-    framing,
+    MetricsSnapshot, ReloadConfigRequest, ReloadConfigResponse, RescanRequest, RescanResponse,
+    SearchRequest, StatusRequest, framing,
 };
 #[cfg(test)]
 use ipc::{SearchResponse, StatusResponse};
@@ -235,6 +235,35 @@ fn dispatch(payload: &[u8]) -> Vec<u8> {
             Err(e) => (false, Some(e.to_string())),
         };
         let resp = ReloadConfigResponse {
+            id: req.id,
+            success,
+            message,
+        };
+        let encoded = bincode::serialize(&resp).unwrap_or_default();
+        record_ipc_request(started.elapsed());
+        return encoded;
+    }
+
+    // Handle RescanRequest
+    if let Some(req) = deserialize_exact::<RescanRequest>(payload) {
+        let started = Instant::now();
+        let cfg = core_types::config::get_current_config();
+        let res = crate::scanner::scan_volumes(&cfg).and_then(|jobs| {
+            let mut submitted = 0usize;
+            for job in jobs {
+                if crate::scheduler_runtime::enqueue_content_job(job) {
+                    submitted += 1;
+                }
+            }
+            Ok::<usize, anyhow::Error>(submitted)
+        });
+
+        let (success, message) = match res {
+            Ok(count) => (true, Some(format!("Submitted {} jobs", count))),
+            Err(e) => (false, Some(e.to_string())),
+        };
+
+        let resp = RescanResponse {
             id: req.id,
             success,
             message,

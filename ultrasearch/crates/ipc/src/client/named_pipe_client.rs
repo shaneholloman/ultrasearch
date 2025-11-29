@@ -1,8 +1,8 @@
 #![cfg(target_os = "windows")]
 
 use crate::{
-    ReloadConfigRequest, ReloadConfigResponse, SearchRequest, SearchResponse, StatusRequest,
-    StatusResponse, framing,
+    ReloadConfigRequest, ReloadConfigResponse, RescanRequest, RescanResponse, SearchRequest,
+    SearchResponse, StatusRequest, StatusResponse, framing,
 };
 use anyhow::{Result, bail};
 use serde::{Serialize, de::DeserializeOwned};
@@ -85,6 +85,10 @@ impl PipeClient {
     }
 
     pub async fn reload_config(&self, req: ReloadConfigRequest) -> Result<ReloadConfigResponse> {
+        self.request(&req).await
+    }
+
+    pub async fn rescan(&self, req: RescanRequest) -> Result<RescanResponse> {
         self.request(&req).await
     }
 
