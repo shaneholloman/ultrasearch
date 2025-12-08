@@ -1786,36 +1786,10 @@ pub fn init_tracing() {
         
     let filter_layer = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| "info".into());
-    
-    #[cfg(feature = "jaeger")]
-    let telemetry_layer = {
-        use opentelemetry::sdk::trace::TracerProvider;
-        use opentelemetry_otlp::WithExportConfig;
-        
-        let provider = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(
-                opentelemetry_otlp::new_exporter()
-                    .tonic()
-                    .with_endpoint("http://localhost:4317")
-            )
-            .with_trace_config(
-                opentelemetry::sdk::trace::config()
-                    .with_resource(opentelemetry::sdk::Resource::new(vec![
-                        opentelemetry::KeyValue::new("service.name", "my-service"),
-                    ]))
-            )
-            .build()
-            .expect("Failed to create tracer");
-            
-        tracing_opentelemetry::layer().with_tracer(provider.tracer("my-service"))
-    };
-    
+
     tracing_subscriber::registry()
         .with(filter_layer)
         .with(fmt_layer)
-        #[cfg(feature = "jaeger")]
-        .with(telemetry_layer)
         .init();
 }
 

@@ -64,13 +64,17 @@ pub fn run_app_with_options(
 
     let mut pending_jobs = Vec::new();
 
+    let mut cfg_owned = cfg.clone();
+    super::ensure_default_volumes(&mut cfg_owned)?;
+    ensure_data_paths_exist(&cfg_owned)?;
+
     match opts.initial_metas {
-        Some(metas) => ingest_seed_metadata(cfg, metas, &mut pending_jobs)?,
+        Some(metas) => ingest_seed_metadata(&cfg_owned, metas, &mut pending_jobs)?,
         None if opts.skip_initial_ingest => {
             tracing::info!("skip_initial_ingest=true; leaving indices empty");
         }
         None => {
-            let jobs = scan_volumes(cfg)?;
+            let jobs = scan_volumes(&cfg_owned)?;
             pending_jobs.extend(jobs);
         }
     }
@@ -78,7 +82,7 @@ pub fn run_app_with_options(
     // Start scheduler loop
     // We need to clone cfg for the scheduler (or pass reference if new() takes ref).
     // SchedulerRuntime::new takes &AppConfig.
-    let mut scheduler = SchedulerRuntime::new(cfg);
+    let mut scheduler = SchedulerRuntime::new(&cfg_owned);
     if opts.force_content_jobs {
         scheduler.force_allow_content();
     }
@@ -92,7 +96,7 @@ pub fn run_app_with_options(
     rt.spawn(scheduler.run_loop());
 
     // Start change watcher (USN or noop on unsupported platforms) after scheduler channel exists.
-    let cfg_clone = cfg.clone();
+    let cfg_clone = cfg_owned.clone();
     rt.spawn(async move {
         if let Err(e) = watch_changes(cfg_clone).await {
             tracing::warn!("change watcher exited: {e}");
@@ -101,8 +105,8 @@ pub fn run_app_with_options(
 
     // Try to install unified search handler.
     // We pass both meta and content index paths.
-    let meta_path = Path::new(&cfg.paths.meta_index);
-    let content_path = Path::new(&cfg.paths.content_index);
+    let meta_path = Path::new(&cfg_owned.paths.meta_index);
+    let content_path = Path::new(&cfg_owned.paths.content_index);
 
     let mut attempts = 0;
     loop {
@@ -165,6 +169,27 @@ pub fn run_app_with_options(
     let _ = shutdown_rx.blocking_recv();
 
     tracing::info!("Shutdown signal received. Exiting.");
+    Ok(())
+}
+
+/// Make sure all configured data paths exist so worker processes don’t fail with ENOENT.
+fn ensure_data_paths_exist(cfg: &AppConfig) -> Result<()> {
+    use std::fs;
+    let paths = [
+        &cfg.paths.meta_index,
+        &cfg.paths.content_index,
+        &cfg.paths.state_dir,
+        &cfg.paths.jobs_dir,
+    ];
+
+    for p in paths {
+        let path = std::path::Path::new(p);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        // If path itself is meant to be a directory (indexes/dirs), create it too.
+        fs::create_dir_all(path)?;
+    }
     Ok(())
 }
 

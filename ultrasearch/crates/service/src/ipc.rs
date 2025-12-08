@@ -36,7 +36,8 @@ pub async fn start_pipe_server(pipe_name: Option<&str>) -> Result<JoinHandle<()>
             let server = match unsafe { create_secure_pipe(&name, first) } {
                 Ok(s) => s,
                 Err(e) => {
-                    tracing::error!("failed to create secure named pipe: {}", e);
+                    // Likely another instance owns the pipe. Back off and retry, but escalate to warning after a few tries.
+                    tracing::warn!("named pipe create failed ({}); retrying in 1s", e);
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                     continue;
                 }

@@ -25,7 +25,7 @@ fn reconnect_counter() -> &'static AtomicUsize {
     RECONNECT_SUCCESSES.get_or_init(|| AtomicUsize::new(0))
 }
 
-/// Expose reconnect success count for telemetry/testing.
+/// Expose reconnect success count for diagnostics/testing.
 #[allow(dead_code)]
 pub fn reconnect_success_count() -> usize {
     reconnect_counter().load(Ordering::Relaxed)

@@ -43,12 +43,10 @@ pub fn scan_volumes(cfg: &AppConfig) -> Result<Vec<JobSpec>> {
         }
     };
 
-    // Filter based on config
+    // Filter based on config; if no volumes specified, index all discovered NTFS volumes.
     let volumes: Vec<_> = if cfg.volumes.is_empty() {
-        tracing::info!(
-            "Volume list empty in config; skipping initial scan until a drive is selected."
-        );
-        Vec::new()
+        tracing::info!("Volume list empty in config; defaulting to all discovered NTFS volumes.");
+        all_volumes
     } else {
         all_volumes
             .into_iter()

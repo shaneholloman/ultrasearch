@@ -13,3 +13,6 @@ dotenvy = { workspace = true }
 ipc = { path = "../ipc" }
 tokio = { workspace = true, features = ["rt", "time", "net"] }
 uuid = { workspace = true }
+
+[build-dependencies]
+winres = "0.1"

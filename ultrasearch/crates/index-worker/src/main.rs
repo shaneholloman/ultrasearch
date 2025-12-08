@@ -24,12 +24,12 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 struct Args {
-    /// Volume id for the document key (used when --job-file not supplied).
+    /// Volume id for the document key (required when --job-file is not supplied).
     #[arg(long)]
-    volume_id: u16,
-    /// File reference number (FRN) for the document key (used when --job-file not supplied).
+    volume_id: Option<u16>,
+    /// File reference number (FRN) for the document key (required when --job-file is not supplied).
     #[arg(long)]
-    file_id: u64,
+    file_id: Option<u64>,
     /// Path to a single file to extract (required if --job-file is not provided).
     #[arg(long)]
     path: Option<PathBuf>,
@@ -156,10 +156,16 @@ fn main() -> Result<()> {
             .path
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("--path is required when --job-file is not provided"))?;
+        let volume_id = args.volume_id.ok_or_else(|| {
+            anyhow::anyhow!("--volume-id is required when --job-file is not provided")
+        })?;
+        let file_id = args.file_id.ok_or_else(|| {
+            anyhow::anyhow!("--file-id is required when --job-file is not provided")
+        })?;
 
         let single = JobSpec {
-            volume_id: args.volume_id,
-            file_id: args.file_id,
+            volume_id,
+            file_id,
             path: path.clone(),
             max_bytes: Some(args.max_bytes),
             max_chars: Some(args.max_chars),

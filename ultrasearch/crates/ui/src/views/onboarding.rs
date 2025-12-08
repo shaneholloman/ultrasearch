@@ -4,7 +4,6 @@ use crate::theme;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 use ipc;
-use std::path::PathBuf;
 use sysinfo::{DiskKind, Disks};
 use uuid;
 
@@ -57,6 +56,18 @@ impl OnboardingView {
                     content_indexing: true,
                 });
             }
+        }
+
+        if drives.is_empty() {
+            // Fallback: at least seed the system drive so indexing can start.
+            let sys_drive = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".to_string());
+            let mount = format!("{sys_drive}\\");
+            drives.push(DriveChoice {
+                name: mount.clone(),
+                label: format!("{mount} - default"),
+                selected: true,
+                content_indexing: true,
+            });
         }
 
         Self {
@@ -114,12 +125,12 @@ impl OnboardingView {
 
             config.volumes = selected;
             config.content_index_volumes = content_enabled;
-            // Telemetry is permanently disabled; enforce false regardless of UI.
-            config.app.telemetry_opt_in = false;
-
-            let target = PathBuf::from("config/config.toml");
+            let target = core_types::config::default_config_path();
+            if let Some(parent) = target.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
             if let Ok(toml) = toml::to_string_pretty(&config) {
-                let _ = std::fs::write(target, toml);
+                let _ = std::fs::write(&target, toml);
             }
         }
 

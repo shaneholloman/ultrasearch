@@ -31,7 +31,7 @@ static LIVE_STATE: OnceLock<SchedulerLiveState> = OnceLock::new();
 static JOB_SENDER: OnceLock<mpsc::UnboundedSender<JobSpec>> = OnceLock::new();
 static RUNTIME_ACTIVE: AtomicBool = AtomicBool::new(false);
 
-const MAX_CONTENT_QUEUE: usize = 10_000;
+const MAX_CONTENT_QUEUE: usize = 100_000;
 
 /// Runtime wrapper that drives a simple scheduling loop and dispatches content batches.
 pub struct SchedulerRuntime {
@@ -176,8 +176,19 @@ impl SchedulerRuntime {
         update_status_metrics(None);
 
         // Gate metadata/content on policies; we only have content jobs for now.
-        let allow_content =
+        let mut allow_content =
             self.force_allow_content || allow_content_jobs(idle_sample.state, load, &self.config);
+
+        // If backlog is large, override load/idle gates to prevent permanent stalls.
+        let backlog = self.content_jobs.len();
+        if backlog >= (MAX_CONTENT_QUEUE / 2) {
+            allow_content = true;
+            tracing::warn!(
+                "Backlog high ({} jobs, max {}); overriding load gates to drain queue",
+                backlog,
+                MAX_CONTENT_QUEUE
+            );
+        }
 
         if allow_content && !self.content_jobs.is_empty() {
             let batch_size = self

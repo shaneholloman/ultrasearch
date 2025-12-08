@@ -26,7 +26,7 @@
 
 ## IPC Self-Healing
 - Named pipe client retries up to 5 times with 100ms backoff (service missing or busy); on successful reconnect, UI shows a green “Reconnected to service” toast.
-- Retry successes are counted for telemetry; warnings logged on failures/timeouts.
+- Retry successes are counted for diagnostics; warnings logged on failures/timeouts.
 
 ## Status & Metrics
 - Scheduler queue depth, active workers, and content jobs enqueued/dropped surfaced via metrics/status.

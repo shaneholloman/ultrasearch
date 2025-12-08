@@ -1,34 +1,39 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use console::style;
+use core_types::config::{default_config_path, load_or_create_config};
 #[cfg(not(windows))]
 use ipc::MetricsSnapshot;
 use ipc::{
-    QueryExpr, SearchMode, SearchRequest, SearchResponse, StatusRequest, StatusResponse, TermExpr,
-    TermModifier,
+    QueryExpr, ReloadConfigRequest, RescanRequest, SearchMode, SearchRequest, SearchResponse,
+    StatusRequest, StatusResponse, TermExpr, TermModifier,
 };
 use uuid::Uuid;
 
 #[cfg(windows)]
 use ipc::client::PipeClient;
 
-/// Debug / scripting CLI for UltraSearch IPC.
+/// UltraSearch CLI — Typer-style, self-documenting commands for agents and humans.
 #[derive(Parser, Debug)]
 #[command(
-    name = "ultrasearch-cli",
+    name = "ultrasearch",
     version,
-    about = "UltraSearch debug/diagnostic client"
+    about = "UltraSearch command-line client"
 )]
 struct Cli {
+    /// Override pipe name (default: \\.\pipe\ultrasearch)
+    #[arg(long)]
+    pipe: Option<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Run a search query (IPC transport).
+    /// Run a search query over IPC.
     Search {
-        /// Query string.
+        /// Query string (full-text or filename).
         query: String,
         /// Limit results.
         #[arg(short, long, default_value_t = 20)]
@@ -46,9 +51,52 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// Request service status.
+
+    /// Request service status (volumes, queues, metrics).
     Status {
         /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Ask the service to reload its config file.
+    ReloadConfig {
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Ask the service to rescan volumes and enqueue indexing jobs.
+    Rescan {
+        /// Output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show or edit the config on disk (ProgramData).
+    Config {
+        #[command(subcommand)]
+        sub: ConfigCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum ConfigCmd {
+    /// Print the effective config path and contents.
+    Show {
+        /// Output as JSON (raw TOML otherwise).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Set volumes and content-index volumes in the config file.
+    SetVolumes {
+        /// Volumes to include (e.g., C:\ D:\). If omitted, defaults to all discovered NTFS volumes.
+        #[arg(long, num_args = 0..)]
+        volume: Vec<String>,
+        /// Volumes to content-index (subset). If omitted, mirrors --volume.
+        #[arg(long, num_args = 0..)]
+        content_volume: Vec<String>,
+        /// Output resulting config as JSON.
         #[arg(long)]
         json: bool,
     },
@@ -64,50 +112,135 @@ enum ModeArg {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenvy::dotenv().ok();
     let cli = Cli::parse();
     match cli.command {
         Commands::Search {
-            query,
+            ref query,
             limit,
             offset,
             mode,
             timeout_ms,
             json,
         } => {
-            let req = build_search_request(&query, limit, offset, timeout_ms, mode);
-            if !json {
-                println!("{}", style("Sending request...").cyan());
-            }
-
-            #[cfg(windows)]
-            let resp = PipeClient::default().search(req).await?;
-
-            #[cfg(not(windows))]
-            let resp = stub_search(req).await?;
-
-            if json {
-                println!("{}", serde_json::to_string_pretty(&resp)?);
-            } else {
-                print_search_response(&resp)?;
-            }
+            let req = build_search_request(query, limit, offset, timeout_ms, mode);
+            let resp = pipe(&cli).search(req).await?;
+            output(resp, json, print_search_response)?;
         }
         Commands::Status { json } => {
             let req = StatusRequest { id: Uuid::new_v4() };
-
-            #[cfg(windows)]
-            let resp = PipeClient::default().status(req).await?;
-
-            #[cfg(not(windows))]
-            let resp = stub_status(req).await?;
-
-            if json {
-                println!("{}", serde_json::to_string_pretty(&resp)?);
-            } else {
-                print_status_response(&resp)?;
-            }
+            let resp = pipe(&cli).status(req).await?;
+            output(resp, json, print_status_response)?;
         }
+        Commands::ReloadConfig { json } => {
+            let req = ReloadConfigRequest { id: Uuid::new_v4() };
+            let resp = pipe(&cli).reload_config(req).await?;
+            output(resp, json, |r| {
+                println!(
+                    "{} {}",
+                    style("Reload config:").green(),
+                    if r.success { "ok" } else { "failed" }
+                );
+                if let Some(msg) = &r.message {
+                    println!("  {}", msg);
+                }
+                Ok(())
+            })?;
+        }
+        Commands::Rescan { json } => {
+            let req = RescanRequest { id: Uuid::new_v4() };
+            let resp = pipe(&cli).rescan(req).await?;
+            output(resp, json, |r| {
+                println!(
+                    "{} {}",
+                    style("Rescan:").green(),
+                    if r.success { "ok" } else { "failed" }
+                );
+                if let Some(msg) = &r.message {
+                    println!("  {}", msg);
+                }
+                Ok(())
+            })?;
+        }
+        Commands::Config { sub } => match sub {
+            ConfigCmd::Show { json } => {
+                let path = default_config_path();
+                let cfg = load_or_create_config(None)?;
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "path": path,
+                            "config": cfg,
+                        })
+                        .to_string()
+                    );
+                } else {
+                    println!("{}", style("Config path:").green());
+                    println!("  {}", path.to_string_lossy());
+                    println!("{}", style("Config:").green());
+                    let toml = toml::to_string_pretty(&cfg)?;
+                    println!("{toml}");
+                }
+            }
+            ConfigCmd::SetVolumes {
+                volume,
+                content_volume,
+                json,
+            } => {
+                let mut cfg = load_or_create_config(None)?;
+                let vols = if volume.is_empty() {
+                    cfg.volumes.clone()
+                } else {
+                    volume
+                };
+                let content = if content_volume.is_empty() {
+                    if vols.is_empty() {
+                        Vec::new()
+                    } else {
+                        vols.clone()
+                    }
+                } else {
+                    content_volume
+                };
+                cfg.volumes = vols;
+                cfg.content_index_volumes = content;
+                let path = default_config_path();
+                if let Some(parent) = path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                let toml = toml::to_string_pretty(&cfg)?;
+                std::fs::write(&path, toml)?;
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "path": path,
+                            "config": cfg,
+                        })
+                        .to_string()
+                    );
+                } else {
+                    println!("{}", style("Updated config").green());
+                    println!("  {}", path.to_string_lossy());
+                }
+            }
+        },
     }
     Ok(())
+}
+
+#[cfg(windows)]
+fn pipe(cli: &Cli) -> PipeClient {
+    cli.pipe
+        .as_ref()
+        .map(|p| PipeClient::new(p.clone()))
+        .unwrap_or_default()
+}
+
+#[cfg(not(windows))]
+fn pipe(_cli: &Cli) -> StubClient {
+    StubClient
 }
 
 fn build_search_request(
@@ -198,6 +331,46 @@ fn print_search_response(resp: &SearchResponse) -> Result<()> {
         .dim()
     );
     Ok(())
+}
+
+fn output<T, F>(value: T, json: bool, pretty: F) -> Result<()>
+where
+    T: serde::Serialize,
+    F: FnOnce(&T) -> Result<()>,
+{
+    if json {
+        println!("{}", serde_json::to_string_pretty(&value)?);
+    } else {
+        pretty(&value)?;
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+struct StubClient;
+
+#[cfg(not(windows))]
+impl StubClient {
+    async fn status(&self, _: StatusRequest) -> Result<StatusResponse> {
+        stub_status(StatusRequest { id: Uuid::new_v4() }).await
+    }
+    async fn search(&self, req: SearchRequest) -> Result<SearchResponse> {
+        stub_search(req).await
+    }
+    async fn reload_config(&self, _: ReloadConfigRequest) -> Result<ipc::ReloadConfigResponse> {
+        Ok(ipc::ReloadConfigResponse {
+            id: Uuid::new_v4(),
+            success: true,
+            message: Some("stub".into()),
+        })
+    }
+    async fn rescan(&self, _: RescanRequest) -> Result<ipc::RescanResponse> {
+        Ok(ipc::RescanResponse {
+            id: Uuid::new_v4(),
+            success: true,
+            message: Some("stub".into()),
+        })
+    }
 }
 
 #[cfg(not(windows))]

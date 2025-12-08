@@ -472,7 +472,7 @@ impl Render for HelpPanel {
                             .gap_3()
                             .child(callout(
                                 "Privacy",
-                                "UltraSearch keeps all indexing local and does not send telemetry. Drive choices can be changed later in Settings > Onboarding.",
+                                "UltraSearch keeps all indexing local and does not send any data off your machine. Drive choices can be changed later in Settings > Onboarding.",
                             ))
                             .child(callout(
                                 "Support shortcuts",

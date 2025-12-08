@@ -12,6 +12,10 @@ use std::sync::RwLock;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     #[serde(default)]
+    pub volumes: Vec<String>,
+    #[serde(default)]
+    pub content_index_volumes: Vec<String>,
+    #[serde(default)]
     pub app: AppSection,
     #[serde(default)]
     pub logging: LoggingSection,
@@ -27,17 +31,13 @@ pub struct AppConfig {
     pub extract: ExtractSection,
     #[serde(default)]
     pub semantic: SemanticSection,
-    #[serde(default)]
-    pub volumes: Vec<String>,
-    #[serde(default)]
-    pub content_index_volumes: Vec<String>,
 }
 
 /// Load config, creating a default config file if none exists at the target path.
 pub fn load_or_create_config(path: Option<&Path>) -> Result<AppConfig> {
     let target: PathBuf = path
         .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("config/config.toml"));
+        .unwrap_or_else(default_config_path);
 
     if !target.exists() {
         if let Some(parent) = target.parent() {
@@ -77,8 +77,6 @@ pub struct AppSection {
     pub product_uid: String,
     #[serde(default = "default_data_dir")]
     pub data_dir: String,
-    #[serde(default)]
-    pub telemetry_opt_in: bool,
 }
 
 impl Default for AppSection {
@@ -86,7 +84,6 @@ impl Default for AppSection {
         Self {
             product_uid: default_product_uid(),
             data_dir: default_data_dir(),
-            telemetry_opt_in: false,
         }
     }
 }
@@ -147,7 +144,7 @@ fn default_log_roll() -> String {
     "daily".into()
 }
 fn default_log_max_size() -> u64 {
-    100
+    2
 }
 fn default_log_retain() -> u32 {
     7
@@ -422,7 +419,7 @@ pub fn load_config(path: Option<&Path>) -> Result<AppConfig> {
 pub fn reload_config(path: Option<&Path>) -> Result<AppConfig> {
     let target = path
         .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("config/config.toml"));
+        .unwrap_or_else(default_config_path);
 
     let mut lock = CONFIG
         .write()
@@ -506,19 +503,67 @@ fn expand_env_vars(input: &str) -> String {
     }
 
     // 2. Windows-style %VAR%
-    if cfg!(windows) && result.contains('%') {
-        for (key, value) in std::env::vars() {
-            let mut token = String::with_capacity(key.len() + 2);
-            token.push('%');
-            token.push_str(&key);
-            token.push('%');
-            if result.contains(&token) {
-                result = result.replace(&token, &value);
+    #[cfg(windows)]
+    {
+        if result.contains('%') {
+            use std::collections::HashMap;
+
+            // Build a case-insensitive map of env vars to avoid %PROGRAMDATA% mismatch.
+            let mut env_map: HashMap<String, String> = HashMap::new();
+            for (k, v) in std::env::vars() {
+                env_map.insert(k.to_ascii_uppercase(), v);
             }
+
+            let mut out = String::with_capacity(result.len());
+            let mut chars = result.chars().peekable();
+            while let Some(ch) = chars.next() {
+                if ch == '%' {
+                    let mut name = String::new();
+                    while let Some(&c) = chars.peek() {
+                        chars.next();
+                        if c == '%' {
+                            break;
+                        }
+                        name.push(c);
+                    }
+
+                    if name.is_empty() {
+                        out.push('%');
+                        continue;
+                    }
+
+                    let key = name.to_ascii_uppercase();
+                    if let Some(val) = env_map.get(&key) {
+                        out.push_str(val);
+                    } else {
+                        // Unknown token; preserve original text.
+                        out.push('%');
+                        out.push_str(&name);
+                        out.push('%');
+                    }
+                } else {
+                    out.push(ch);
+                }
+            }
+            result = out;
         }
     }
 
     result
+}
+
+/// Default configuration path for installed binaries: `%PROGRAMDATA%/UltraSearch/config/config.toml`.
+/// Falls back to a relative `config/config.toml` if PROGRAMDATA is missing (developer runs).
+pub fn default_config_path() -> PathBuf {
+    let base = std::env::var("PROGRAMDATA")
+        .map(|pd| {
+            PathBuf::from(pd)
+                .join("UltraSearch")
+                .join("config")
+                .join("config.toml")
+        })
+        .unwrap_or_else(|_| PathBuf::from("config/config.toml"));
+    base
 }
 
 #[cfg(test)]

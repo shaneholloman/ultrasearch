@@ -1,6 +1,24 @@
+
 $ErrorActionPreference = "Stop"
 
-Write-Host "Building release binaries..."
+function Get-WorkspaceVersion {
+    param([string]$CargoTomlPath = "Cargo.toml")
+    if (-not (Test-Path $CargoTomlPath)) { return $null }
+    $content = Get-Content $CargoTomlPath -Raw
+    $match = [regex]::Match($content, '(?m)^\s*version\s*=\s*\"([^\"]+)\"')
+    if ($match.Success) { return $match.Groups[1].Value }
+    return $null
+}
+
+$Version = $Env:ULTRASEARCH_VERSION
+if (-not $Version) {
+    $Version = Get-WorkspaceVersion
+}
+if (-not $Version) {
+    $Version = "0.1.0"
+}
+
+Write-Host "Building release binaries (version $Version)..."
 cargo build --release -p service
 cargo build --release -p ui
 cargo build --release -p launcher
@@ -13,7 +31,6 @@ if (-not (Get-Command "candle.exe" -ErrorAction SilentlyContinue)) {
     exit 0
 }
 
-$Version = "0.1.0"
 $WxsFile = "ultrasearch\wix\main.wxs"
 $ObjFile = "target\wix\main.wixobj"
 $MsiFile = "target\wix\UltraSearch-$Version.msi"
@@ -21,7 +38,7 @@ $MsiFile = "target\wix\UltraSearch-$Version.msi"
 New-Item -ItemType Directory -Force -Path "target\wix" | Out-Null
 
 Write-Host "Compiling WiX source..."
-candle.exe -nologo -out $ObjFile $WxsFile -arch x64 -ext WixUtilExtension
+candle.exe -nologo -out $ObjFile $WxsFile -arch x64 -ext WixUtilExtension -dProductVersion="$Version"
 
 Write-Host "Linking MSI..."
 light.exe -nologo -out $MsiFile $ObjFile -ext WixUtilExtension -cultures:en-us

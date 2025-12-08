@@ -21,7 +21,7 @@ updates = {
         'description': 'Detect busy/presentation/game modes using SHQueryUserNotificationState (QUNS_BUSY, QUNS_RUNNING_D3D_FULL_SCREEN) to pause background indexing reliably.'
     },
     'ultrasearch-c03.6': {
-        'description': 'Integrate Sentry telemetry for panic capture (Service & UI). STRICTLY OPT-IN via Wizard/Settings. Scrub PII (paths, usernames) before sending.'
+        'description': 'Integrate Sentry crash reporting for panic capture (Service & UI). STRICTLY OPT-IN via Wizard/Settings. Scrub PII (paths, usernames) before sending.'
     },
     'ultrasearch-c04.1': {
         'description': 'Use SHGetFileInfo to retrieve HICONs. Implement HICON -> RGBA Bitmap conversion for rendering within GPUI. Cache results to texture atlas.'

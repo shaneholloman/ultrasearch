@@ -74,16 +74,23 @@ impl JobDispatcher {
         tokio::fs::write(&job_file_path, json).await?;
 
         info!(
-            "Spawning worker for batch {} ({} jobs)",
+            "Spawning worker for batch {} ({} jobs) using worker_path={}",
             batch_id,
-            jobs.len()
+            jobs.len(),
+            self.worker_path.display()
         );
 
         let worker_path = self.worker_path.clone();
         let job_file_for_spawn = job_file_path.clone();
-        let index_dir = self.index_dir.clone();
+        let index_dir_for_spawn = self.index_dir.clone();
+        let index_dir_for_log = index_dir_for_spawn.clone();
 
         let status = task::spawn_blocking(move || -> anyhow::Result<std::process::ExitStatus> {
+            if !worker_path.exists() {
+                error!("worker binary missing at {}", worker_path.display());
+                anyhow::bail!("worker binary missing at {}", worker_path.display());
+            }
+
             #[cfg(target_os = "windows")]
             {
                 use std::os::windows::io::AsHandle;
@@ -96,7 +103,7 @@ impl JobDispatcher {
                     .arg("--job-file")
                     .arg(&job_file_for_spawn)
                     .arg("--index-dir")
-                    .arg(&index_dir)
+                    .arg(&index_dir_for_spawn)
                     .creation_flags(CREATE_NO_WINDOW)
                     .spawn()
                     .context("failed to spawn worker process")?;
@@ -127,10 +134,19 @@ impl JobDispatcher {
         .await??;
 
         if status.success() {
-            info!("Worker batch {} completed successfully", batch_id);
+            info!(
+                "Worker batch {} completed successfully (status={})",
+                batch_id, status
+            );
             tokio::fs::remove_file(job_file_path).await.ok();
         } else {
-            error!("Worker batch {} failed with status: {}", batch_id, status);
+            error!(
+                "Worker batch {} failed with status: {} (job_file={}, index_dir={})",
+                batch_id,
+                status,
+                job_file_path.display(),
+                index_dir_for_log.display()
+            );
         }
 
         Ok(())

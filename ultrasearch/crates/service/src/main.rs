@@ -43,6 +43,9 @@ fn main() -> Result<()> {
 
     // Load config early to ensure it exists, though bootstrap will reload or use passed cfg.
     let cfg = load_or_create_config(None)?;
+    // Ensure config file is writable by standard users for CLI/UI updates.
+    let cfg_path = core_types::config::default_config_path();
+    service::ensure_config_acl_writable(&cfg_path);
 
     tracing::info!("Starting service (console: {})", args.console);
 

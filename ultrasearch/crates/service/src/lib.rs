@@ -33,6 +33,76 @@ pub use status_provider::{
     BasicStatusProvider, init_basic_status_provider, set_status_provider, status_snapshot,
 };
 
+use core_types::config::AppConfig;
+use ntfs_watcher::discover_volumes;
+use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
+
+/// Ensure config has at least one volume; default to all discovered NTFS volumes if empty.
+/// Best-effort persist back to the default config path, but proceed even if write fails.
+pub fn ensure_default_volumes(cfg: &mut AppConfig) -> anyhow::Result<()> {
+    if cfg.volumes.is_empty() {
+        if let Ok(vols) = discover_volumes() {
+            let mounts: Vec<String> = vols
+                .iter()
+                .flat_map(|v| {
+                    v.drive_letters
+                        .iter()
+                        .map(|l| format!("{l}:\\"))
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            if !mounts.is_empty() {
+                cfg.volumes = mounts.clone();
+                if cfg.content_index_volumes.is_empty() {
+                    cfg.content_index_volumes = mounts;
+                }
+                persist_config(cfg);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn persist_config(cfg: &AppConfig) {
+    let path = core_types::config::default_config_path();
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(toml) = toml::to_string_pretty(cfg) {
+        let _ = fs::write(PathBuf::from(path.clone()), toml);
+        ensure_config_acl_writable(&PathBuf::from(path));
+    }
+}
+
+/// Best-effort: ensure Users have modify rights on the config file so the CLI/UI can update volumes.
+pub fn ensure_config_acl_writable(path: &PathBuf) {
+    #[cfg(windows)]
+    {
+        let target = path.to_string_lossy().to_string();
+        let parent = path
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| target.clone());
+        // Grant Modify to Users on the directory recursively so future files inherit.
+        let _ = Command::new("icacls")
+            .args([
+                &parent,
+                "/grant",
+                "*S-1-5-32-545:(OI)(CI)M",
+                "/T",
+                "/C",
+                "/Q",
+            ])
+            .status();
+        // Also grant Modify on the file itself (in case it already exists).
+        let _ = Command::new("icacls")
+            .args([&target, "/grant", "*S-1-5-32-545:(M)", "/C", "/Q"])
+            .status();
+    }
+}
+
 #[cfg(all(test, target_os = "windows", feature = "e2e-windows"))]
 mod e2e_windows_tests {
     use crate::bootstrap::{BootstrapOptions, run_app_with_options};
