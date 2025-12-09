@@ -555,15 +555,14 @@ fn expand_env_vars(input: &str) -> String {
 /// Default configuration path for installed binaries: `%PROGRAMDATA%/UltraSearch/config/config.toml`.
 /// Falls back to a relative `config/config.toml` if PROGRAMDATA is missing (developer runs).
 pub fn default_config_path() -> PathBuf {
-    let base = std::env::var("PROGRAMDATA")
+    std::env::var("PROGRAMDATA")
         .map(|pd| {
             PathBuf::from(pd)
                 .join("UltraSearch")
                 .join("config")
                 .join("config.toml")
         })
-        .unwrap_or_else(|_| PathBuf::from("config/config.toml"));
-    base
+        .unwrap_or_else(|_| PathBuf::from("config/config.toml"))
 }
 
 #[cfg(test)]
