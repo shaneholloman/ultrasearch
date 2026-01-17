@@ -2,20 +2,33 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
-    tags: [ "v*" ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  windows-tests:
-    name: Windows / fmt + clippy + tests
+  # Format check - fast, catches style issues early
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+  # Clippy lints - runs on Windows since project is Windows-specific
+  clippy:
+    name: Clippy (Windows)
     runs-on: windows-latest
     timeout-minutes: 60
     env:
@@ -50,7 +63,58 @@ jobs:
           $env:JAVA_HOME = $env:GRAALVM_HOME
           "GRAALVM_HOME=$env:GRAALVM_HOME" >> $env:GITHUB_ENV
           "JAVA_HOME=$env:JAVA_HOME" >> $env:GITHUB_ENV
-          # Append GraalVM bin to PATH (note: GITHUB_PATH expects bare paths, not `PATH=...`)
+          "$env:GRAALVM_HOME\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-clippy-
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # Test suite - Windows only
+  test:
+    name: Tests (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      CARGO_TARGET_DIR: target
+      CARGO_INCREMENTAL: 0
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GraalVM CE 23 (zip) and set JAVA_HOME/GRAALVM_HOME
+        run: |
+          $ErrorActionPreference = "Stop"
+          $uri = "https://download.oracle.com/graalvm/23/latest/graalvm-jdk-23_windows-x64_bin.zip"
+          $zip = "$env:TEMP\graalvm.zip"
+          for ($i=1; $i -le 5; $i++) {
+            try {
+              Write-Host "Downloading GraalVM attempt $i..."
+              Invoke-WebRequest -Uri $uri -OutFile $zip -UseBasicParsing
+              break
+            } catch {
+              if ($i -eq 5) { throw }
+              Start-Sleep -Seconds 5
+            }
+          }
+          $dest = "C:\Program Files\GraalVM"
+          if (-Not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest | Out-Null }
+          Expand-Archive -Force -Path $zip -DestinationPath $dest
+          $graal = Get-ChildItem $dest | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $graal) { throw "GraalVM not found after unzip" }
+          $env:GRAALVM_HOME = $graal.FullName
+          $env:JAVA_HOME = $env:GRAALVM_HOME
+          "GRAALVM_HOME=$env:GRAALVM_HOME" >> $env:GITHUB_ENV
+          "JAVA_HOME=$env:JAVA_HOME" >> $env:GITHUB_ENV
           "$env:GRAALVM_HOME\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
       - uses: dtolnay/rust-toolchain@nightly
         with:
@@ -61,168 +125,16 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo
-          restore-keys: ${{ runner.os }}-cargo-
-      - name: Cargo fmt
-        run: cargo fmt --check
-      - name: Cargo clippy
-        run: cargo clippy --all-targets -- -D warnings
-      - name: Cargo test (all targets, all features)
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-test-
+      - name: Run tests
         run: cargo test --all-targets --all-features -- --nocapture
 
-  windows-msi:
-    name: Windows / MSI packaging (tags)
+  # E2E smoke test - verify binaries build and run
+  e2e-smoke:
+    name: E2E Smoke (Windows)
     runs-on: windows-latest
-    needs: [windows-tests]
-    if: startsWith(github.ref, 'refs/tags/v')
-    outputs:
-      msi_built: ${{ steps.set_msi_output.outputs.msi_built }}
-    timeout-minutes: 60
-    env:
-      CARGO_TARGET_DIR: target
-      CARGO_INCREMENTAL: 0
-    defaults:
-      run:
-        shell: pwsh
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install GraalVM CE 23 (zip) and set JAVA_HOME/GRAALVM_HOME
-        run: |
-          $ErrorActionPreference = "Stop"
-          $uri = "https://download.oracle.com/graalvm/23/latest/graalvm-jdk-23_windows-x64_bin.zip"
-          $zip = "$env:TEMP\graalvm.zip"
-          for ($i=1; $i -le 5; $i++) {
-            try {
-              Write-Host "Downloading GraalVM attempt $i..."
-              Invoke-WebRequest -Uri $uri -OutFile $zip -UseBasicParsing
-              break
-            } catch {
-              if ($i -eq 5) { throw }
-              Start-Sleep -Seconds 5
-            }
-          }
-          $dest = "C:\Program Files\GraalVM"
-          if (-Not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest | Out-Null }
-          Expand-Archive -Force -Path $zip -DestinationPath $dest
-          $graal = Get-ChildItem $dest | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $graal) { throw "GraalVM not found after unzip" }
-          $env:GRAALVM_HOME = $graal.FullName
-          $env:JAVA_HOME = $env:GRAALVM_HOME
-          "GRAALVM_HOME=$env:GRAALVM_HOME" >> $env:GITHUB_ENV
-          "JAVA_HOME=$env:JAVA_HOME" >> $env:GITHUB_ENV
-          "$env:GRAALVM_HOME\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-      - uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy,rustfmt
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-      - name: Build release binary
-        run: cargo build --release
-      - name: Install WiX Toolset
-        run: |
-          $wixRoot = Get-ChildItem "C:/Program Files (x86)" -Filter "WiX Toolset v3.*" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          if (-not $wixRoot) {
-            choco install wixtoolset --version 3.14.0 -y --allow-downgrade
-            $wixRoot = Get-ChildItem "C:/Program Files (x86)" -Filter "WiX Toolset v3.*" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-          }
-          if (-not $wixRoot) { throw "WiX Toolset not found after install" }
-          "WIX=$($wixRoot.FullName)\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
-      - name: Install cargo-wix
-        run: cargo install --git https://github.com/volks73/cargo-wix cargo-wix --force
-      - name: Prepare wix manifest without workspace inheritance
-        run: |
-          cd ultrasearch/crates/ui
-          (Get-Content Cargo.toml) -replace 'workspace\s*=\s*true', 'version = "*"' | Set-Content Cargo.wix.toml
-      - name: Build unsigned MSI (ui crate)
-        id: build_msi
-        run: |
-          $ErrorActionPreference = "Stop"
-          $ProgressPreference = "SilentlyContinue"
-          $env:CARGO_TARGET_DIR = Join-Path $env:GITHUB_WORKSPACE "target"
-          $uiDir = Join-Path $env:GITHUB_WORKSPACE "ultrasearch\crates\ui"
-          $binPath = Join-Path $env:CARGO_TARGET_DIR "release\ui.exe"
-          Write-Host "Binary path: $binPath"
-          if (-not (Test-Path $binPath)) {
-            Write-Host "Release UI binary not found at $binPath"
-            Write-Host "Available files under target/release:"
-            Get-ChildItem "$env:CARGO_TARGET_DIR/release" -ErrorAction SilentlyContinue
-            exit 1
-          }
-          $tempDir = Join-Path $env:RUNNER_TEMP "wix_manifest"
-          New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-          $tempManifest = Join-Path $tempDir "Cargo.toml"
-          $tempSrc = Join-Path $tempDir "placeholder.rs"
-
-          # Build a minimal single-package manifest so cargo-wix can run without workspace inheritance.
-          $wxsPath = (Join-Path $uiDir "wix\main.wxs").Replace('\\','/')
-          $manifestLines = @(
-            '[package]'
-            'name = "ui"'
-            'version = "0.1.0"'
-            'edition = "2021"'
-            'license = "MIT OR Apache-2.0"'
-            'description = "UltraSearch desktop client"'
-            ''
-            '[package.metadata.wix]'
-            'upgrade-guid = "F5B2C1A2-5BC0-4C5D-93E4-0D6F9A6C9E11"'
-            ('path-to-wxs = "' + $wxsPath + '"')
-            'binary-name = "ui"'
-            'manufacturer = "Ultrasearch Team"'
-            'homepage = "https://github.com/Dicklesworthstone/ultrasearch"'
-            ''
-            '[[bin]]'
-            'name = "ui"'
-            'path = "placeholder.rs"'
-          )
-          Set-Content -Path $tempManifest -Value $manifestLines
-          Set-Content -Path $tempSrc -Value "fn main() {}"
-
-          Write-Host "=== temp manifest ==="
-          Get-Content $tempManifest
-          Write-Host "Before wix, wix dir listing:"
-          Get-ChildItem "$env:CARGO_TARGET_DIR/wix" -Recurse -ErrorAction SilentlyContinue
-
-          cargo wix --manifest-path $tempManifest --no-build --bin-path "$binPath" -v
-
-          Write-Host "After wix, wix dir listing:"
-          Get-ChildItem "$env:CARGO_TARGET_DIR/wix" -Recurse -ErrorAction SilentlyContinue
-      - name: List wix outputs
-        run: |
-          Write-Host "Wix output contents:"
-          Get-ChildItem target/wix -Recurse -ErrorAction SilentlyContinue
-      - name: Set MSI built output
-        id: set_msi_output
-        run: |
-          $msiPath = Get-ChildItem target/wix -Filter *.msi -Recurse -ErrorAction SilentlyContinue
-          if ($msiPath) {
-            Write-Host "MSI found: $($msiPath.FullName)"
-            "msi_built=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } else {
-            Write-Host "No MSI found under target/wix"
-            "msi_built=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
-      - name: Upload MSI artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ultrasearch-msi
-          path: target/wix/**/*.msi
-      - name: Upload release binary artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ultrasearch-release-bin
-          path: target/release/ui.exe
-
-  windows-e2e-smoke:
-    name: Windows / E2E smoke (service + CLI)
-    runs-on: windows-latest
-    needs: [windows-tests]
+    needs: [clippy, test]
     timeout-minutes: 60
     env:
       CARGO_TARGET_DIR: target
@@ -257,37 +169,21 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-e2e-
       - name: Build release
         run: cargo build --release
       - name: CLI help smoke
         run: cargo run -p cli --release -- --help
-      - name: Service build presence
-        run: Test-Path target/release/service.exe | Out-Null
-      - name: UI build presence
-        run: Test-Path target/release/ui.exe | Out-Null
-
-  release-publish:
-    name: Publish release artifacts
-    runs-on: ubuntu-latest
-    needs: [windows-msi]
-    if: startsWith(github.ref, 'refs/tags/v')
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download MSI
-        uses: actions/download-artifact@v4
-        with:
-          name: ultrasearch-msi
-          path: dist
-      - name: Download release binary
-        uses: actions/download-artifact@v4
-        with:
-          name: ultrasearch-release-bin
-          path: dist
-      - name: Publish GitHub Release assets
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            dist/ui.exe
-            dist/*.msi
+      - name: Verify service binary exists
+        run: |
+          if (-not (Test-Path target/release/service.exe)) {
+            throw "service.exe not found"
+          }
+          Write-Host "service.exe found"
+      - name: Verify UI binary exists
+        run: |
+          if (-not (Test-Path target/release/ui.exe)) {
+            throw "ui.exe not found"
+          }
+          Write-Host "ui.exe found"

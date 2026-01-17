@@ -1,0 +1,336 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  # Build Windows release binaries
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      CARGO_TARGET_DIR: target
+      CARGO_INCREMENTAL: 0
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GraalVM CE 23 (zip) and set JAVA_HOME/GRAALVM_HOME
+        run: |
+          $ErrorActionPreference = "Stop"
+          $uri = "https://download.oracle.com/graalvm/23/latest/graalvm-jdk-23_windows-x64_bin.zip"
+          $zip = "$env:TEMP\graalvm.zip"
+          for ($i=1; $i -le 5; $i++) {
+            try {
+              Write-Host "Downloading GraalVM attempt $i..."
+              Invoke-WebRequest -Uri $uri -OutFile $zip -UseBasicParsing
+              break
+            } catch {
+              if ($i -eq 5) { throw }
+              Start-Sleep -Seconds 5
+            }
+          }
+          $dest = "C:\Program Files\GraalVM"
+          if (-Not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest | Out-Null }
+          Expand-Archive -Force -Path $zip -DestinationPath $dest
+          $graal = Get-ChildItem $dest | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $graal) { throw "GraalVM not found after unzip" }
+          $env:GRAALVM_HOME = $graal.FullName
+          $env:JAVA_HOME = $env:GRAALVM_HOME
+          "GRAALVM_HOME=$env:GRAALVM_HOME" >> $env:GITHUB_ENV
+          "JAVA_HOME=$env:JAVA_HOME" >> $env:GITHUB_ENV
+          "$env:GRAALVM_HOME\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy,rustfmt
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-release-
+
+      - name: Build release binaries
+        run: cargo build --release
+
+      - name: Create dist directory
+        run: New-Item -ItemType Directory -Force -Path dist
+
+      - name: Copy binaries to dist
+        run: |
+          Copy-Item target/release/ui.exe dist/ultrasearch-ui.exe
+          Copy-Item target/release/service.exe dist/ultrasearch-service.exe
+          Copy-Item target/release/cli.exe dist/ultrasearch-cli.exe -ErrorAction SilentlyContinue
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binaries
+          path: dist/*.exe
+
+  # Build MSI installer
+  build-msi:
+    name: Build Windows MSI
+    runs-on: windows-latest
+    needs: [build-windows]
+    timeout-minutes: 60
+    env:
+      CARGO_TARGET_DIR: target
+      CARGO_INCREMENTAL: 0
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GraalVM CE 23 (zip) and set JAVA_HOME/GRAALVM_HOME
+        run: |
+          $ErrorActionPreference = "Stop"
+          $uri = "https://download.oracle.com/graalvm/23/latest/graalvm-jdk-23_windows-x64_bin.zip"
+          $zip = "$env:TEMP\graalvm.zip"
+          for ($i=1; $i -le 5; $i++) {
+            try {
+              Write-Host "Downloading GraalVM attempt $i..."
+              Invoke-WebRequest -Uri $uri -OutFile $zip -UseBasicParsing
+              break
+            } catch {
+              if ($i -eq 5) { throw }
+              Start-Sleep -Seconds 5
+            }
+          }
+          $dest = "C:\Program Files\GraalVM"
+          if (-Not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest | Out-Null }
+          Expand-Archive -Force -Path $zip -DestinationPath $dest
+          $graal = Get-ChildItem $dest | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $graal) { throw "GraalVM not found after unzip" }
+          $env:GRAALVM_HOME = $graal.FullName
+          $env:JAVA_HOME = $env:GRAALVM_HOME
+          "GRAALVM_HOME=$env:GRAALVM_HOME" >> $env:GITHUB_ENV
+          "JAVA_HOME=$env:JAVA_HOME" >> $env:GITHUB_ENV
+          "$env:GRAALVM_HOME\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy,rustfmt
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-msi-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-msi-
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Install WiX Toolset
+        run: |
+          $wixRoot = Get-ChildItem "C:/Program Files (x86)" -Filter "WiX Toolset v3.*" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $wixRoot) {
+            choco install wixtoolset --version 3.14.0 -y --allow-downgrade
+            $wixRoot = Get-ChildItem "C:/Program Files (x86)" -Filter "WiX Toolset v3.*" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          }
+          if (-not $wixRoot) { throw "WiX Toolset not found after install" }
+          "WIX=$($wixRoot.FullName)\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install cargo-wix
+        run: cargo install --git https://github.com/volks73/cargo-wix cargo-wix --force
+
+      - name: Prepare wix manifest without workspace inheritance
+        run: |
+          cd ultrasearch/crates/ui
+          (Get-Content Cargo.toml) -replace 'workspace\s*=\s*true', 'version = "*"' | Set-Content Cargo.wix.toml
+
+      - name: Build unsigned MSI (ui crate)
+        id: build_msi
+        run: |
+          $ErrorActionPreference = "Stop"
+          $ProgressPreference = "SilentlyContinue"
+          $env:CARGO_TARGET_DIR = Join-Path $env:GITHUB_WORKSPACE "target"
+          $uiDir = Join-Path $env:GITHUB_WORKSPACE "ultrasearch\crates\ui"
+          $binPath = Join-Path $env:CARGO_TARGET_DIR "release\ui.exe"
+          Write-Host "Binary path: $binPath"
+          if (-not (Test-Path $binPath)) {
+            Write-Host "Release UI binary not found at $binPath"
+            Write-Host "Available files under target/release:"
+            Get-ChildItem "$env:CARGO_TARGET_DIR/release" -ErrorAction SilentlyContinue
+            exit 1
+          }
+          $tempDir = Join-Path $env:RUNNER_TEMP "wix_manifest"
+          New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+          $tempManifest = Join-Path $tempDir "Cargo.toml"
+          $tempSrc = Join-Path $tempDir "placeholder.rs"
+
+          # Build a minimal single-package manifest so cargo-wix can run without workspace inheritance.
+          $wxsPath = (Join-Path $uiDir "wix\main.wxs").Replace('\\','/')
+          $manifestLines = @(
+            '[package]'
+            'name = "ui"'
+            'version = "0.1.0"'
+            'edition = "2021"'
+            'license = "MIT OR Apache-2.0"'
+            'description = "UltraSearch desktop client"'
+            ''
+            '[package.metadata.wix]'
+            'upgrade-guid = "F5B2C1A2-5BC0-4C5D-93E4-0D6F9A6C9E11"'
+            ('path-to-wxs = "' + $wxsPath + '"')
+            'binary-name = "ui"'
+            'manufacturer = "Ultrasearch Team"'
+            'homepage = "https://github.com/Dicklesworthstone/ultrasearch"'
+            ''
+            '[[bin]]'
+            'name = "ui"'
+            'path = "placeholder.rs"'
+          )
+          Set-Content -Path $tempManifest -Value $manifestLines
+          Set-Content -Path $tempSrc -Value "fn main() {}"
+
+          Write-Host "=== temp manifest ==="
+          Get-Content $tempManifest
+          Write-Host "Before wix, wix dir listing:"
+          Get-ChildItem "$env:CARGO_TARGET_DIR/wix" -Recurse -ErrorAction SilentlyContinue
+
+          cargo wix --manifest-path $tempManifest --no-build --bin-path "$binPath" -v
+
+          Write-Host "After wix, wix dir listing:"
+          Get-ChildItem "$env:CARGO_TARGET_DIR/wix" -Recurse -ErrorAction SilentlyContinue
+
+      - name: List wix outputs
+        run: |
+          Write-Host "Wix output contents:"
+          Get-ChildItem target/wix -Recurse -ErrorAction SilentlyContinue
+
+      - name: Create dist directory
+        run: New-Item -ItemType Directory -Force -Path dist
+
+      - name: Copy MSI to dist
+        run: |
+          $msiFiles = Get-ChildItem target/wix -Filter *.msi -Recurse -ErrorAction SilentlyContinue
+          if ($msiFiles) {
+            foreach ($msi in $msiFiles) {
+              Copy-Item $msi.FullName dist/
+              Write-Host "Copied $($msi.Name) to dist/"
+            }
+          } else {
+            Write-Host "No MSI files found"
+          }
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-msi
+          path: dist/*.msi
+
+  # Create GitHub Release with checksums
+  publish-release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-msi]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create dist directory
+        run: mkdir -p dist
+
+      - name: Download Windows binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binaries
+          path: dist
+
+      - name: Download MSI installer
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-msi
+          path: dist
+        continue-on-error: true
+
+      - name: List dist contents
+        run: ls -la dist/
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          echo "=== SHA256SUMS.txt ==="
+          cat SHA256SUMS.txt
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: UltraSearch ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          generate_release_notes: true
+          files: |
+            dist/ultrasearch-ui.exe
+            dist/ultrasearch-service.exe
+            dist/ultrasearch-cli.exe
+            dist/*.msi
+            dist/SHA256SUMS.txt
+          body: |
+            ## UltraSearch ${{ steps.version.outputs.version }}
+
+            ### Downloads
+
+            | File | Description |
+            |------|-------------|
+            | `ultrasearch-ui.exe` | Desktop UI application |
+            | `ultrasearch-service.exe` | Background Windows service |
+            | `ultrasearch-cli.exe` | Command-line interface |
+            | `*.msi` | Windows installer package |
+
+            ### Verification
+
+            Verify the integrity of downloaded files using the `SHA256SUMS.txt` file:
+
+            ```powershell
+            # PowerShell
+            Get-FileHash ultrasearch-ui.exe -Algorithm SHA256
+
+            # Compare with the hash in SHA256SUMS.txt
+            ```
+
+            ```bash
+            # Linux/macOS/WSL
+            sha256sum -c SHA256SUMS.txt
+            ```
+
+            ### Installation
+
+            **Option 1: MSI Installer (Recommended)**
+            1. Download and run the `.msi` installer
+            2. Follow the installation wizard
+
+            **Option 2: Manual Installation**
+            1. Download the individual `.exe` files
+            2. Place them in your desired location
+            3. Run `ultrasearch-service.exe` to start the background service
+            4. Run `ultrasearch-ui.exe` to launch the desktop application
+
+            ### Requirements
+
+            - Windows 10 or later (x64)
+            - NTFS file system for optimal performance
